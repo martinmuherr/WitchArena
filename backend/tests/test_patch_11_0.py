@@ -168,3 +168,29 @@ def test_hidra_de_cueva_dana_a_los_adyacentes():
     g.end_turn()
     hydra.attack(o.field[1])
     assert [m.health for m in o.field] == [3, 3, 3]
+
+
+def test_glinda_da_eco_a_los_esbirros_de_la_mano():
+    g = _game(hero1="HERO_07")
+    p = g.player1
+    p.max_mana = 10
+    p.discard_hand()
+    p.give("GIL_618").play()
+    p.give("CS2_182").play()
+    assert [c.id for c in p.hand] == ["CS2_182"]   # copia con Eco
+
+
+def test_vanguardia_de_plata_recluta_un_8():
+    from fireplace.game import Game
+    from fireplace.player import Player
+    engine_db()
+    deck = ["EX1_298"] * 30   # Ragnaros (coste 8)
+    g = Game(players=[Player("A", list(deck), "HERO_04"), Player("B", list(deck), "HERO_04")])
+    g.start()
+    for pl in g.players:
+        pl.choice.choose()
+    p = g.current_player
+    p.max_mana = 10
+    p.discard_hand()
+    p.give("LOOT_184").play().destroy()
+    assert [m.id for m in p.field] == ["EX1_298"]

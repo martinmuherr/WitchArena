@@ -83,7 +83,6 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
       <div className="mana mana-left">
         <span className="mana-n">{side.mana}/{side.max_mana}</span>
         {side.overloaded > 0 && <span className="overload">Sobrecarga {side.overloaded}</span>}
-        <span className="deck-n">Mazo: {side.deck}</span>
       </div>
       <div className="weapon-slot">
         {side.weapon && (
@@ -115,6 +114,12 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
         <CardArt id={side.power.id} icon={side.power.icon} cls={side.power.class_key} className="p-art" />
         <span className="p-name">{side.power.name}</span>
       </div>
+      <div className="deck-pile" data-deck={mine ? "me" : "opp"} title={`Mazo: ${side.deck} cartas`}>
+        {[...Array(Math.min(5, Math.ceil(side.deck / 6)))].map((_, i) => (
+          <div key={i} className="deck-layer" style={{ transform: `translate(${i * 2}px, ${-i * 2}px)` }} />
+        ))}
+        <span className="deck-count">{side.deck}</span>
+      </div>
     </div>
   );
 }
@@ -139,29 +144,28 @@ function Projectile({ fx, onDone }) {
   const ref = useRef(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
     const dx = fx.to.x - fx.from.x;
     const dy = fx.to.y - fx.from.y;
-    const travel = fx.kind === "self" ? 0 : 450;
-    if (el.animate && travel) {
+    const travel = fx.kind === "self" || fx.noFly ? 0 : 750;
+    if (el && el.animate && travel) {
       el.animate(
         [
           { transform: "translate(-50%,-50%) translate(0px,0px) scale(.7)", opacity: 0.2 },
           { transform: `translate(-50%,-50%) translate(${dx * 0.5}px,${dy * 0.5 - 40}px) scale(1.15)`, opacity: 1, offset: 0.5 },
           { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) scale(1)`, opacity: 1 },
         ],
-        { duration: travel, easing: "ease-in", fill: "forwards" },
+        { duration: travel, easing: "ease-in", fill: "forwards", delay: fx.delay || 0 },
       );
     }
-    const t = setTimeout(onDone, travel + 750);
+    const t = setTimeout(onDone, (fx.delay || 0) + travel + 1100);
     return () => clearTimeout(t);
   }, []);
-  const travel = fx.kind === "self" ? 0 : 450;
+  const travel = (fx.kind === "self" || fx.noFly ? 0 : 750) + (fx.delay || 0);
   const url = fx.icon ? `url(/assets/icons/${fx.icon}.svg)` : null;
   return (
     <>
-      {fx.kind !== "self" && (
-        <div ref={ref} className={"projectile k-" + fx.kind} style={{ left: fx.from.x + "px", top: fx.from.y + "px" }}>
+      {fx.kind !== "self" && !fx.noFly && (
+        <div ref={ref} className={"projectile k-" + fx.kind} style={{ left: fx.from.x + "px", top: fx.from.y + "px", opacity: fx.delay ? 0 : undefined }}>
           {url && <div className={"proj-icon c-" + (fx.cls || "neutral")} style={{ maskImage: url, WebkitMaskImage: url }} />}
         </div>
       )}
@@ -169,6 +173,48 @@ function Projectile({ fx, onDone }) {
         {fx.amount ? <span className="impact-n">{fx.kind === "heal" ? "+" : "-"}{fx.amount}</span> : null}
       </div>
     </>
+  );
+}
+
+// Carta que vuela del mazo a la mano al robar
+function DrawFlyer({ f, onDone }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const dx = f.to.x - f.from.x;
+    const dy = f.to.y - f.from.y;
+    if (el && el.animate) {
+      el.animate(
+        [
+          { transform: "translate(-50%,-50%) translate(0,0) rotate(0deg) scale(.8)", opacity: 0 },
+          { transform: `translate(-50%,-50%) translate(${dx * 0.4}px,${dy * 0.4 - 60}px) rotate(-8deg) scale(1.15)`, opacity: 1, offset: 0.4 },
+          { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) rotate(0deg) scale(1)`, opacity: 1 },
+        ],
+        { duration: 750, delay: f.delay, easing: "ease-in-out", fill: "forwards" },
+      );
+    }
+    const t = setTimeout(onDone, f.delay + 800);
+    return () => clearTimeout(t);
+  }, []);
+  return <div ref={ref} className="draw-flyer" style={{ left: f.from.x + "px", top: f.from.y + "px", opacity: 0 }} />;
+}
+
+// Carta lanzada o secreto revelado, en grande unos instantes
+function CastOverlay({ ev }) {
+  const isSecretReveal = ev.type === "secret";
+  const hidden = ev.card && ev.card.hidden;
+  return (
+    <div className={"cast-overlay " + (ev.mine ? "mine" : "opp") + (isSecretReveal ? " secret-reveal" : "")}>
+      {isSecretReveal && <div className="secret-flash" />}
+      <div className="cast-card">
+        {hidden ? (
+          <div className="secret-back"><span>?</span></div>
+        ) : (
+          <Card card={ev.card} />
+        )}
+        {(isSecretReveal || ev.secret) && <div className="secret-banner">{isSecretReveal ? "¡Secreto!" : "Secreto"}</div>}
+      </div>
+    </div>
   );
 }
 
@@ -200,6 +246,13 @@ export function GameBoard({ gameId, onExit }) {
   const [attackAnim, setAttackAnim] = useState(null);
   const [effects, setEffects] = useState([]);
   const lastEffectSeq = useRef(null);
+  // eventos: carta lanzada / secreto (de uno en uno), robos, muertes, invocaciones
+  const lastEventSeq = useRef(null);
+  const [overlay, setOverlay] = useState(null);
+  const overlayQueue = useRef([]);
+  const overlayBusy = useRef(false);
+  const [flyers, setFlyers] = useState([]);
+  const [marks, setMarks] = useState([]);
   const left = useCountdown(view);
   const esRef = useRef(null);
   const handRef = useRef(null);
@@ -268,6 +321,21 @@ export function GameBoard({ gameId, onExit }) {
     return () => window.removeEventListener("keydown", esc);
   }, []);
 
+  // muestra en grande las cartas lanzadas y los secretos, de una en una
+  const pumpOverlay = () => {
+    if (overlayBusy.current) return;
+    const ev = overlayQueue.current.shift();
+    if (!ev) return;
+    overlayBusy.current = true;
+    setOverlay(ev);
+    const ms = ev.type === "secret" ? 2000 : ev.secret ? 1400 : 1700;
+    setTimeout(() => {
+      setOverlay(null);
+      overlayBusy.current = false;
+      setTimeout(pumpOverlay, 120);
+    }, ms);
+  };
+
   // ------------------------------------------------ animación de ataque (para los dos jugadores)
   useLayoutEffect(() => {
     if (!view) return;
@@ -309,13 +377,69 @@ export function GameBoard({ gameId, onExit }) {
         le.hits.forEach((h, i) => {
           const rt = h.died ? rectsRef.current[h.eid] || rectOf(h.eid) : rectOf(h.eid);
           if (!rt) return;
-          list.push({ id: le.seq + "-" + i, from, to: center(rt), kind: h.kind, amount: h.amount, icon: le.icon, cls: le.class_key });
+          list.push({ id: le.seq + "-" + i, from, to: center(rt), kind: h.kind, amount: h.amount, icon: le.icon, cls: le.class_key,
+            delay: le.power ? 150 : 550 });
         });
         if (list.length) setEffects((cur) => [...cur, ...list]);
       }
     }
     if (le) lastEffectSeq.current = le.seq;
     else if (lastEffectSeq.current === null) lastEffectSeq.current = 0;
+
+    // ---- eventos nuevos
+    const evs = view.events || [];
+    if (lastEventSeq.current === null) {
+      lastEventSeq.current = view.event_seq || 0; // al entrar no repetimos lo ya ocurrido
+    } else {
+      const fresh = evs.filter((e) => e.seq > lastEventSeq.current);
+      if (fresh.length) lastEventSeq.current = fresh[fresh.length - 1].seq;
+      const rectOf = (sel) => {
+        const el = document.querySelector(sel);
+        return el && el.getBoundingClientRect();
+      };
+      const newFlyers = [];
+      const newMarks = [];
+      fresh.forEach((ev, idx) => {
+        if (ev.type === "cast" || ev.type === "secret") {
+          overlayQueue.current.push(ev);
+        } else if (ev.type === "draw") {
+          const deck = rectOf(`[data-deck="${ev.mine ? "me" : "opp"}"]`);
+          [...(ev.eids || []), ...(ev.gained || [])].forEach((eid, j) => {
+            const to = rectOf(`[data-hand-eid="${eid}"]`);
+            const fromDeck = (ev.eids || []).includes(eid);
+            if (!to) return;
+            newFlyers.push({
+              id: ev.seq + "-" + j, to: center(to), delay: j * 180,
+              from: fromDeck && deck ? center(deck) : { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+              mine: ev.mine,
+            });
+          });
+        } else if (ev.type === "death" || ev.type === "leave") {
+          const r = rectsRef.current[ev.eid];
+          if (r) newMarks.push({ id: "m" + ev.seq, kind: ev.type === "death" ? (ev.deathrattle ? "deathrattle" : "death") : "leave", rect: r, card: ev.card });
+        } else if (ev.type === "summon") {
+          const r = rectOf(`.board [data-eid="${ev.eid}"]`);
+          if (r) newMarks.push({ id: "m" + ev.seq, kind: "summon", rect: r });
+        } else if (ev.type === "hits") {
+          const src = ev.source != null ? rectsRef.current[ev.source] : null;
+          const list = [];
+          ev.hits.forEach((h, i) => {
+            const rt = (document.querySelector(`.board [data-eid="${h.eid}"]`) || {}).getBoundingClientRect?.() || rectsRef.current[h.eid];
+            if (!rt) return;
+            const to = center(rt);
+            list.push({ id: "h" + ev.seq + "-" + i, from: src ? center(src) : to, to, kind: h.kind, noFly: !src,
+              amount: h.amount, icon: null, cls: null, delay: 350 + idx * 60 });
+          });
+          if (list.length) setEffects((cur) => [...cur, ...list]);
+        }
+      });
+      if (newFlyers.length) setFlyers((cur) => [...cur, ...newFlyers]);
+      if (newMarks.length) {
+        setMarks((cur) => [...cur, ...newMarks]);
+        newMarks.forEach((m) => setTimeout(() => setMarks((cur) => cur.filter((x) => x.id !== m.id)), 1400));
+      }
+      pumpOverlay();
+    }
     // guardamos dónde está cada entidad para la próxima animación
     const rects = {};
     document.querySelectorAll(".board [data-eid]").forEach((el) => {
@@ -496,7 +620,7 @@ export function GameBoard({ gameId, onExit }) {
       if (c.contains("board") || c.contains("side") || c.contains("field") || c.contains("hand") || c.contains("midline") || c.contains("hero-row")) setSel(null);
     }}>
       <div className="side opp">
-        <div className="hand opp-hand">{opp.hand.map((c) => <CardBack key={c.eid} />)}</div>
+        <div className="hand opp-hand">{opp.hand.map((c) => <div key={c.eid} data-hand-eid={c.eid}><CardBack /></div>)}</div>
         <Hero side={opp} hoverProps={hoverProps} targetable={isTarget(opp.hero.eid) || isDragTarget(opp.hero.eid)}
           onClick={sel ? () => clickTarget(opp.hero.eid) : undefined} />
         <div className="field">
@@ -543,7 +667,7 @@ export function GameBoard({ gameId, onExit }) {
           onPower={clickPower} powerUsable={myTurn && me.power.usable} powerActive={sel && sel.kind === "power"} />
         <div className="hand" ref={handRef}>
           {me.hand.map((c) => (
-            <div key={c.eid} className={"hand-slot" + (drag && drag.card.eid === c.eid && drag.moved ? " lifted" : "")}
+            <div key={c.eid} data-hand-eid={c.eid} className={"hand-slot" + (drag && drag.card.eid === c.eid && drag.moved ? " lifted" : "")}
               onPointerDown={(e) => startDrag(c, e)} {...hoverProps(c)}>
               <Card card={c} small dim={myTurn && !c.playable} selected={sel && sel.eid === c.eid} />
             </div>
@@ -560,6 +684,14 @@ export function GameBoard({ gameId, onExit }) {
       {drag && drag.arrow && <Arrow from={drag.from} to={{ x: drag.x, y: drag.y }} className="aim" />}
       {sel && sel.from && mouse && <Arrow from={sel.from} to={mouse} className="aim" />}
       {attackAnim && <Arrow from={attackAnim.from} to={attackAnim.to} className="attack" />}
+      {flyers.map((f) => <DrawFlyer key={f.id} f={f} onDone={() => setFlyers((cur) => cur.filter((x) => x.id !== f.id))} />)}
+      {marks.map((m) => (
+        <div key={m.id} className={"mark mark-" + m.kind}
+          style={{ left: m.rect.left + "px", top: m.rect.top + "px", width: m.rect.width + "px", height: m.rect.height + "px" }}>
+          {m.kind === "deathrattle" && <span className="mark-label">Último aliento</span>}
+        </div>
+      ))}
+      {overlay && <CastOverlay ev={overlay} />}
       {effects.map((fx) => (
         <Projectile key={fx.id} fx={fx} onDone={() => setEffects((cur) => cur.filter((x) => x.id !== fx.id))} />
       ))}

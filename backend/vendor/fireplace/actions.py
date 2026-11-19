@@ -489,6 +489,10 @@ class Play(GameAction):
         card.play_left_most = card is card.controller.hand[0]
         card.play_right_most = card is card.controller.hand[-1]
 
+        # HS_WitchArena: el Eco que da un aura en la mano (Glinda Piel de Cuervo) desaparece
+        # al salir de la mano, así que lo miramos ANTES de mover la carta.
+        had_echo = bool(card.echo)
+
         card.zone = Zone.PLAY
 
         # Remember cast on friendly characters
@@ -521,7 +525,7 @@ class Play(GameAction):
                     card, [Battlecry(battlecry_card, card.target)]
                 )
 
-            if card.echo:
+            if card.echo or had_echo:
                 source.game.queue_actions(
                     card, [Give(player, Buff(Copy(SELF), "GIL_000"))]
                 )

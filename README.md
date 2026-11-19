@@ -34,6 +34,8 @@ WitchArena es una web hecha por fans para jugar el **modo Arena de Hearthstone e
 - 🔍 **Vista previa al pasar el ratón** (en la mesa y en el registro): la carta original con sus valores base y las mejoras que tiene encima, y de dónde vienen.
 - 🛡️ **Provocar** se ve como un escudo detrás del esbirro; **Escudo divino**, como un halo dorado.
 - ✨ **Efectos visuales** para hechizos, poderes de héroe y Gritos de batalla: un proyectil vuela hasta cada objetivo y muestra el daño o la curación.
+- 🃏 **Hechizos y secretos en grande**: al lanzarse, la carta aparece unos instantes mientras ocurre el efecto; los secretos que saltan se anuncian con un destello morado.
+- 📚 **Mazo visible** junto a cada héroe y animación de cada robo; animaciones al morir (con aviso de Último aliento) y al aparecer esbirros.
 
 | Draft | Atacando |
 |:---:|:---:|
@@ -149,6 +151,7 @@ se han devuelto a su versión de 2018:
 | Poderes de héroe básicos | IDs de 2018 (`CS2_083b`…) enlazados al motor | renombrados a `HERO_0Xbp` |
 | Coleccionista de bibelots, Archimago Arugal, Maestro de muñecas Dorian | reaccionan al robar | fallo del motor corregido |
 | Hidra de cueva | daña a los esbirros adyacentes al objetivo | fallo del motor corregido |
+| Glinda Piel de Cuervo | los esbirros de la mano tienen Eco | fallo del motor corregido |
 
 **Pool de Arena:** Básico, Clásico, Viaje a Un'Goro, Caballeros del Trono Helado, Kóbolds y Catacumbas y
 El Bosque Embrujado (**878 cartas**). Excluye el Salón de la Fama y aplica la lista de cartas prohibidas de 2018

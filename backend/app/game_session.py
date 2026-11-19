@@ -41,6 +41,8 @@ class GameSession:
         self.last_attack = None  # {"seq", "attacker", "defender"} para animar el ataque
         self._attack_seq = 0
         self.last_effect = None  # hechizo/poder/grito de batalla: a quién afectó (para animarlo)
+        self.events = []         # robos, secretos, muertes, invocaciones... para animarlos en orden
+        self._event_seq = 0
         self.winner_user_id = None
         self.finished = False
         self.finish_reason = None
@@ -131,8 +133,10 @@ class GameSession:
         card = next((c for c in p.choice.cards if c.entity_id == entity_id), None)
         if card is None:
             raise ActionError("Elección no válida")
+        board = self._board()
         self._run(lambda: p.choice.choose(card))
         self._bump("%s elige una carta" % p.name)
+        self._board_events(board)
 
     def play(self, user_id, entity_id, target=None, choose=None, position=None):
         p = self.player_of(user_id)
@@ -155,11 +159,16 @@ class GameSession:
         if tgt is not None:
             entry += [{"t": " sobre "}, self._ref(tgt)]
         before = self._snapshot()
+        board = self._board()
         source = card.entity_id if card.type == CardType.MINION else p.hero.entity_id
         cid = card.id
+        if card.type == CardType.SPELL:
+            self._event({"type": "cast", "player": self.players.index(p), "card": C.card_view(cid),
+                         "secret": bool(getattr(card, "secret", False)), "eid": card.entity_id})
         self._run(lambda: card.play(target=tgt, index=index, choose=ch))
         self._record_effect(before, source, cid, tgt)
         self._bump(entry)
+        self._board_events(board, played=card.entity_id)
 
     def attack(self, user_id, attacker_id, defender_id):
         p = self.player_of(user_id)
@@ -173,8 +182,11 @@ class GameSession:
         entry = [{"t": "%s: " % p.name}, self._ref(att), {"t": " ataca a "}, self._ref(dfn)]
         self._attack_seq += 1
         self.last_attack = {"seq": self._attack_seq, "attacker": att.entity_id, "defender": dfn.entity_id}
+        board = self._board()
+        before = self._snapshot()
         self._run(lambda: att.attack(dfn))
         self._bump(entry)
+        self._board_events(board, skip_hits={att.entity_id, dfn.entity_id}, before=before)
 
     def hero_power(self, user_id, target=None, choose=None):
         p = self.player_of(user_id)
@@ -192,9 +204,11 @@ class GameSession:
         if tgt is not None:
             entry += [{"t": " sobre "}, self._ref(tgt)]
         before = self._snapshot()
+        board = self._board()
         self._run(lambda: power.use(target=tgt, choose=ch))
         self._record_effect(before, power.entity_id, power.id, tgt, is_power=True)
         self._bump(entry)
+        self._board_events(board)
 
     # ------------------------------------------------------------ efectos visuales
     def _snapshot(self):
@@ -232,6 +246,99 @@ class GameSession:
         self.last_effect = {"seq": self._effect_seq, "source": source_eid, "hits": hits[:10],
                             "icon": v.get("icon"), "class_key": v.get("class_key"), "power": is_power}
 
+    # ------------------------------------------------------- eventos para animar
+    def _event(self, ev):
+        self._event_seq += 1
+        ev["seq"] = self._event_seq
+        self.events.append(ev)
+        self.events = self.events[-40:]
+
+    def _board(self):
+        st = []
+        for pl in self.players:
+            st.append({
+                "hand": [c.entity_id for c in pl.hand],
+                "deck": len(pl.deck),
+                "field": [(m.entity_id, m.id) for m in pl.field],
+                "secrets": [(sc.entity_id, sc.id) for sc in pl.secrets],
+            })
+        return st
+
+    @staticmethod
+    def _has_deathrattle(card_id):
+        from hearthstone.enums import GameTag
+        card = C.engine_db().get(card_id)
+        return bool(card is not None and card.tags.get(GameTag.DEATHRATTLE))
+
+    def _find(self, eid):
+        for e in self.game:
+            if getattr(e, "entity_id", None) == eid:
+                return e
+        return None
+
+    def _board_events(self, before_board, played=None, skip_hits=None, before=None):
+        after = self._board()
+        dying_with_dr = None
+        for i, (b, a) in enumerate(zip(before_board, after)):
+            # robos (del mazo) y cartas que llegan a la mano por otros medios
+            new = [e for e in a["hand"] if e not in b["hand"]]
+            drawn = max(0, b["deck"] - a["deck"])
+            if new:
+                self._event({"type": "draw", "player": i, "eids": new[:drawn] if drawn else [],
+                             "gained": new[drawn:] if drawn else new})
+            # secretos que saltan
+            gone = [(e, cid) for e, cid in b["secrets"] if e not in [x for x, _ in a["secrets"]]]
+            for e, cid in gone:
+                v = C.card_view(cid)
+                self._event({"type": "secret", "player": i, "card": v})
+                self.log.append([{"t": "¡Secreto! "}, {"card": v}, {"t": " se activa"}])
+            # muertes y esbirros que dejan la mesa
+            after_ids = [e for e, _ in a["field"]]
+            for e, cid in b["field"]:
+                if e in after_ids:
+                    continue
+                ent = self._find(e)
+                died = ent is not None and ent.zone == Zone.GRAVEYARD
+                v = C.card_view(cid)
+                dr = bool(died and self._has_deathrattle(cid))
+                self._event({"type": "death" if died else "leave", "player": i, "eid": e, "card": v,
+                             "deathrattle": dr})
+                if dr:
+                    dying_with_dr = dying_with_dr or e
+                    self.log.append([{"t": "Último aliento: "}, {"card": v}])
+            # invocaciones que no son la carta jugada
+            before_ids = [e for e, _ in b["field"]]
+            for e, cid in a["field"]:
+                if e not in before_ids and e != played:
+                    self._event({"type": "summon", "player": i, "eid": e, "card": C.card_view(cid)})
+        # daño/curación causados por efectos (Últimos alientos, secretos, efectos de fin de turno...)
+        if before is not None:
+            now = self._snapshot()
+            hits = []
+            for eid, (hp, atk, mx) in before.items():
+                if skip_hits and eid in skip_hits:
+                    continue
+                cur = now.get(eid)
+                if cur is None:
+                    continue
+                if cur[0] < hp:
+                    hits.append({"eid": eid, "kind": "damage", "amount": hp - cur[0]})
+                elif cur[0] > hp and cur[2] == mx:
+                    hits.append({"eid": eid, "kind": "heal", "amount": cur[0] - hp})
+            if hits:
+                self._event({"type": "hits", "source": dying_with_dr, "hits": hits[:10]})
+        self.log = self.log[-30:]
+
+    def _events_for(self, viewer_idx):
+        out = []
+        for ev in self.events:
+            ev = dict(ev)
+            if ev["type"] == "cast" and ev.get("secret") and ev["player"] != viewer_idx:
+                ev["card"] = {"hidden": True, "name": "Secreto"}
+            ev["mine"] = ev.get("player") == viewer_idx
+            out.append(ev)
+        return out
+
     def end_turn(self, user_id=None, forced=False):
         p = self.game.current_player
         if user_id is not None:
@@ -240,10 +347,13 @@ class GameSession:
         if forced and p.choice is not None and self.game.turn > 0:
             # se acabó el tiempo con una elección abierta: elegimos la primera
             self._run(lambda: p.choice.choose(p.choice.cards[0]))
+        board = self._board()
+        before = self._snapshot()
         if not self.finished:
             self._run(self.game.end_turn)
         self.deadline = time.time() + TURN_SECONDS
         self._bump("%s termina su turno%s" % (p.name, " (tiempo agotado)" if forced else ""))
+        self._board_events(board, before=before)
 
     def concede(self, user_id):
         p = self.player_of(user_id)
@@ -385,4 +495,6 @@ class GameSession:
             "log": self.log[-12:],
             "last_attack": self.last_attack,
             "last_effect": self.last_effect,
+            "events": self._events_for(self.players.index(me))[-25:],
+            "event_seq": self._event_seq,
         }
