@@ -37,12 +37,13 @@ import { useState } from "react";
 import { ART_BASE, CARD_ART } from "./config.js";
 
 // Arte de la carta (HearthstoneJSON). Si falla o está desactivado, usamos el icono.
-export function CardArt({ id, icon, cls, className }) {
+export function CardArt({ id, icon, cls, className, big }) {
   const [failed, setFailed] = useState(false);
   if (!CARD_ART || !id || failed) return <Art icon={icon} cls={cls} className={(className || "art") + " art-fallback"} />;
+  const base = big ? ART_BASE.replace("/256x/", "/512x/") : ART_BASE;
   return (
     <div className={(className || "art") + " art-img"}>
-      <img src={ART_BASE + id + ".jpg"} alt="" loading="lazy" draggable="false"
+      <img src={base + id + ".jpg"} alt="" loading="lazy" draggable="false"
         referrerPolicy="no-referrer" onError={() => setFailed(true)} />
     </div>
   );
@@ -66,15 +67,20 @@ export function Card({ card, onClick, selected, highlight, dim, small, base }) {
   const costChanged = base && base.cost !== undefined && base.cost !== card.cost;
   return (
     <div className={cls} onClick={onClick}>
+      {/* el arte ocupa toda la carta; encima van el nombre y un recuadro translúcido con el texto */}
+      <div className="card-bg">
+        <CardArt id={card.id} icon={card.icon} cls={card.class_key} big={!small} />
+      </div>
       <div className={"cost" + (costChanged ? " changed" : "")}>{card.cost}</div>
       <div className="card-name">{card.name}</div>
-      <CardArt id={card.id} icon={card.icon} cls={card.class_key} />
-      <div className="card-type">
-        {card.type}{card.races && card.races.length ? " · " + card.races.map(raceEs).join(", ") : ""}
-      </div>
-      <div className="card-text"><RichText text={card.text} /></div>
-      <div className="card-foot">
-        <span className="card-meta">{card.class}{card.set ? " · " + card.set : ""}</span>
+      <div className="card-box">
+        <div className="card-type">
+          {card.type}{card.races && card.races.length ? " · " + card.races.map(raceEs).join(", ") : ""}
+        </div>
+        {card.text && <div className="card-text"><RichText text={card.text} /></div>}
+        <div className="card-foot">
+          <span className="card-meta">{card.class}{card.set ? " · " + card.set : ""}</span>
+        </div>
       </div>
       {isMinion && (
         <>

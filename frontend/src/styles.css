@@ -349,3 +349,58 @@ body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-i
 /* sin arte (iconos de respaldo) el esbirro mantiene su diseño anterior */
 .minion .m-art.art-fallback { position: relative; z-index: 1; margin: -4px auto 2px; }
 .minion:has(.art-fallback) .m-body { position: relative; left: 0; right: 0; bottom: 0; }
+
+/* ===================== Cartas a sangre: el arte es el fondo ===================== */
+.card {
+  padding: 0 9px 20px; display: flex; flex-direction: column; justify-content: flex-end; gap: 0;
+  background: #1a120a; border: 3px solid #6b5536; border-radius: 12px;
+  box-shadow: 0 6px 18px #000a, inset 0 0 0 1px #00000088;
+}
+.card .card-bg { position: absolute; inset: 0; border-radius: 9px; overflow: hidden; z-index: 0; background: radial-gradient(circle at 50% 35%, #3d2c1b, #120c07); }
+.card .card-bg .art.art-img { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+/* el cuadrado de 256/512 px se recorta por los lados para llenar la carta sin huecos */
+.card .card-bg .art-img img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 28%; transform: scale(1.04); }
+.card .card-bg::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(#00000055 0%, #0000 18%, #0000 48%, #000000aa 100%); }
+/* sin arte: icono grande centrado arriba */
+.card .card-bg .art.art-fallback { position: absolute; left: 15%; right: 15%; top: 10%; height: 42%; width: auto; margin: 0; }
+.card > *:not(.card-bg):not(.stat):not(.cost) { position: relative; z-index: 1; }
+.card .cost { z-index: 2; }
+.card .stat { z-index: 2; }
+.card .card-name {
+  margin: 0 -9px 6px; padding: 5px 8px; text-align: center; font-size: 15px; color: #fff3d6;
+  background: linear-gradient(90deg, #0000, #1a1109d9 14%, #1a1109d9 86%, #0000);
+  text-shadow: 0 1px 2px #000, 0 0 6px #000; border-top: 1px solid #c9a35a66; border-bottom: 1px solid #c9a35a66;
+}
+.card .card-box {
+  background: #0d0905b3; border: 1px solid #ffffff1f; border-radius: 8px; padding: 6px 8px 5px;
+  backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px); min-height: 64px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.card .card-type { margin: 0; font-size: 10px; color: #d9c7a1; }
+.card .card-text { flex: 0 0 auto; overflow: visible; font-size: 12.5px; line-height: 1.3; color: #f6efe0; text-shadow: 0 1px 1px #000; }
+.card .card-foot { padding: 0; margin-top: 2px; font-size: 9px; color: #b9a98a; }
+/* estadísticas en las esquinas inferiores, sobre el arte */
+.card .stat { bottom: -10px; }
+.card .stat.atk { left: -10px; }
+.card .stat.hp, .card .stat.dur { right: -10px; }
+/* rareza en el marco */
+.card.r-rare { border-color: #3d79c6; } .card.r-epic { border-color: #8a4fc0; } .card.r-legendary { border-color: #e08a2c; box-shadow: 0 6px 18px #000a, 0 0 12px #e08a2c55; }
+.card.playable { border-color: #6fcf5a; box-shadow: 0 0 12px #6fcf5a99; }
+.card.selected { border-color: var(--amber2); }
+
+/* tamaño normal: draft, mulligan, Descubrir, vista previa (crece si el texto es largo) */
+.offer .card, .hover-preview .card { width: 200px; min-height: 280px; height: auto; }
+.offer .card .card-bg .art-img img, .hover-preview .card .card-bg .art-img img { object-position: 50% 25%; }
+/* carta pequeña de la mano */
+.card-small { width: 122px; height: 172px; min-height: 0; padding: 0 5px 14px; border-width: 2px; border-radius: 9px; }
+.card-small .card-bg { border-radius: 7px; }
+.card-small .card-name { font-size: 11px; padding: 3px 4px; margin: 0 -5px 3px; }
+.card-small .card-box { min-height: 0; max-height: 62px; overflow: hidden; padding: 3px 5px; border-radius: 6px; }
+.card-small .card-type, .card-small .card-foot { display: none; }
+.card-small .card-text { font-size: 9.5px; line-height: 1.2; }
+.card-small .stat { bottom: -8px; }
+.card-small .stat.atk { left: -8px; } .card-small .stat.hp, .card-small .stat.dur { right: -8px; }
+.drag-ghost .card-small { box-shadow: 0 14px 30px #000; }
+.mana span { text-shadow: 0 1px 2px #000, 0 0 6px #000; }
+.deck-n { color: #e6d6b4; }
