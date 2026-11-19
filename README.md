@@ -47,6 +47,19 @@ WitchArena es una web hecha por fans para jugar el **modo Arena de Hearthstone e
 
 Para probar una partida solo, abre una ventana normal y otra de incógnito y entra con dos usuarios distintos.
 
+### 🌍 Publicarlo en internet desde tu PC (Cloudflare Tunnel)
+
+Sin abrir puertos del router ni exponer tu IP:
+
+1. **`descargar_cloudflared.bat`**: baja `cloudflared.exe` (versión portable oficial) a la carpeta `tunel/`.
+2. **`publicar.bat`**: arranca el servidor en **modo público** y abre un túnel. Al terminar te muestra la dirección
+   `https://….trycloudflare.com` (también queda guardada en `tunel/url.txt`).
+
+En modo público (`PUBLIC_MODE=1`) las cookies solo viajan por HTTPS, el límite de intentos usa la IP real del
+visitante (`CF-Connecting-IP`) y las cuentas de prueba no pueden entrar. El Quick Tunnel es gratuito y no necesita
+cuenta, pero **la dirección cambia cada vez que se reinicia** y Cloudflare lo considera solo para pruebas. Como no deja
+pasar los eventos en tiempo real (SSE), la web pasa sola a preguntar el estado cada segundo.
+
 <details>
 <summary><b>Linux / macOS</b></summary>
 

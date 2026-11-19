@@ -23,7 +23,12 @@ from . import auth, db, draft
 from .game_session import ActionError, GameSession
 
 COOKIE = "wa_session"
-COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
+# PUBLIC_MODE=1: la web está publicada en internet (túnel de Cloudflare o proxy).
+#   - cookies solo por HTTPS
+#   - la IP real del visitante se lee de la cabecera que añade Cloudflare
+#   - las cuentas de prueba no pueden entrar
+PUBLIC_MODE = os.environ.get("PUBLIC_MODE", "0") == "1"
+COOKIE_SECURE = PUBLIC_MODE or os.environ.get("COOKIE_SECURE", "0") == "1"
 FRONTEND_DIST = os.environ.get(
     "FRONTEND_DIST",
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "frontend", "dist"),
@@ -70,7 +75,7 @@ async def body_json(request):
 
 def current_user(request, require_csrf=False):
     s = auth.get_session(request.cookies.get(COOKIE))
-    if s is None:
+    if s is None or (PUBLIC_MODE and s.get("is_test")):
         return None
     if require_csrf and request.headers.get("x-csrf-token") != s["csrf_token"]:
         return None
@@ -98,10 +103,15 @@ def api(require_login=True, csrf=None):
 
 
 def client_ip(request):
-    # Detrás de Nginx, la IP real llega en X-Real-IP (Nginx la sobrescribe siempre).
-    if os.environ.get("BEHIND_PROXY") == "1":
-        return request.headers.get("x-real-ip", request.client.host)
-    return request.client.host if request.client else "?"
+    peer = request.client.host if request.client else "?"
+    # Solo nos fiamos de las cabeceras de proxy si la conexión viene del propio equipo
+    # (cloudflared o Nginx corriendo en local). Desde fuera no se puede falsificar.
+    if peer in ("127.0.0.1", "::1"):
+        if PUBLIC_MODE and request.headers.get("cf-connecting-ip"):
+            return request.headers["cf-connecting-ip"].strip()[:64]
+        if os.environ.get("BEHIND_PROXY") == "1" and request.headers.get("x-real-ip"):
+            return request.headers["x-real-ip"].strip()[:64]
+    return peer
 
 
 # ------------------------------------------------------------------------ cuentas
@@ -129,7 +139,7 @@ async def login(request, _):
     if not auth.login_limiter_ip.allow(ip) or not auth.login_limiter_user.allow(username.lower()):
         return err("Demasiados intentos. Espera unos minutos.", 429)
     row = auth.authenticate(username, password)
-    if row is None:
+    if row is None or (PUBLIC_MODE and row.get("is_test")):
         return err("Usuario o contraseña incorrectos", 401)
     return _login_response(row["id"], row["username"])
 

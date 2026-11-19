@@ -6,3 +6,6 @@ backend/.pytest_cache/
 frontend/node_modules/
 .env
 *.pyc
+tunel/cloudflared.exe
+tunel/*.log
+tunel/url.txt

@@ -96,18 +96,44 @@ export function GameBoard({ gameId, onExit }) {
   useEffect(() => {
     let closed = false;
     api.get(`/api/game/${gameId}/state`).then(setView).catch((e) => setError(e.message));
+    // Tiempo real por SSE. Algunos túneles (p. ej. Quick Tunnels de Cloudflare) no dejan pasar
+    // SSE, así que si no llega nada en 2,5 s preguntamos el estado cada segundo.
+    let lastEvent = 0;
+    let lastVersion = -1;
+    const apply = (v) => {
+      if (v && v.version !== lastVersion) {
+        lastVersion = v.version;
+        setView(v);
+      }
+    };
     const connect = () => {
       const es = new EventSource(`/api/game/${gameId}/events`);
       esRef.current = es;
-      es.onmessage = (ev) => setView(JSON.parse(ev.data));
+      es.onmessage = (ev) => {
+        lastEvent = Date.now();
+        apply(JSON.parse(ev.data));
+      };
       es.onerror = () => {
         es.close();
-        if (!closed) setTimeout(connect, 2000);
+        if (!closed) setTimeout(connect, 3000);
       };
     };
     connect();
+    let polling = false;
+    const poll = setInterval(async () => {
+      if (polling || Date.now() - lastEvent < 2500) return;
+      polling = true;
+      try {
+        apply(await api.get(`/api/game/${gameId}/state`));
+      } catch {
+        /* reintentamos en el siguiente ciclo */
+      } finally {
+        polling = false;
+      }
+    }, 1000);
     return () => {
       closed = true;
+      clearInterval(poll);
       esRef.current && esRef.current.close();
     };
   }, [gameId]);

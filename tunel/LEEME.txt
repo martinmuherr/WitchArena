@@ -1,0 +1,1 @@
+Carpeta para cloudflared.exe (lo descarga descargar_cloudflared.bat; no se sube a git).

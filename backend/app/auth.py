@@ -63,7 +63,7 @@ def create_user(username, password, is_test=False):
 
 def authenticate(username, password):
     row = db.query_one(
-        "SELECT id, username, password_hash FROM users WHERE LOWER(username) = LOWER(?)",
+        "SELECT id, username, password_hash, is_test FROM users WHERE LOWER(username) = LOWER(?)",
         (username or "",),
     )
     if row is None:
@@ -93,7 +93,7 @@ def get_session(token):
     if not token:
         return None
     row = db.query_one(
-        "SELECT s.user_id, s.csrf_token, s.expires_at, u.username FROM sessions s "
+        "SELECT s.user_id, s.csrf_token, s.expires_at, u.username, u.is_test FROM sessions s "
         "JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?",
         (hashlib.sha256(token.encode()).hexdigest(),),
     )
