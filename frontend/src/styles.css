@@ -263,3 +263,28 @@ label { display: block; margin: 12px 0; font-size: 14px; color: var(--muted); }
 /* ---------- Log con cartas ---------- */
 .log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
 .log-card { color: var(--amber2); border-bottom: 1px dotted #f2c66b88; cursor: help; }
+
+/* ---------- Texto completo en draft, mulligan, Descubrir y vista previa ---------- */
+.offer .card, .hover-preview .card { height: auto; min-height: 262px; }
+.offer .card .card-text, .hover-preview .card .card-text { overflow: visible; flex: 1 0 auto; }
+.offer .card .card-foot, .hover-preview .card .card-foot { margin-top: 6px; }
+.decklist li { cursor: help; }
+
+/* ---------- Proyectiles de hechizos y poderes ---------- */
+.projectile { position: fixed; z-index: 45; pointer-events: none; width: 46px; height: 46px; border-radius: 50%;
+  transform: translate(-50%, -50%); display: grid; place-items: center; }
+.projectile .proj-icon { width: 34px; height: 34px; mask-size: contain; -webkit-mask-size: contain; mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center; background-image: none !important; }
+.projectile.k-damage, .projectile.k-touch { background: radial-gradient(circle, #ffcf7a 0%, #ff6a2b 45%, #ff3b1f00 72%); box-shadow: 0 0 22px 8px #ff6a2b88; }
+.projectile.k-heal { background: radial-gradient(circle, #e9ffd9 0%, #6fdc5a 45%, #6fdc5a00 72%); box-shadow: 0 0 22px 8px #6fdc5a88; }
+.projectile.k-buff { background: radial-gradient(circle, #fff6c9 0%, #f2c66b 45%, #f2c66b00 72%); box-shadow: 0 0 22px 8px #f2c66b88; }
+.impact { position: fixed; z-index: 46; pointer-events: none; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%;
+  opacity: 0; animation: impact .75s ease-out forwards; display: grid; place-items: center; }
+.impact.k-damage { background: radial-gradient(circle, #ff9a5a 0%, #ff3b1f99 40%, #ff3b1f00 70%); }
+.impact.k-touch { background: radial-gradient(circle, #c9a2ff 0%, #8a4fc099 40%, #8a4fc000 70%); }
+.impact.k-heal { background: radial-gradient(circle, #d9ffcc 0%, #6fdc5a99 40%, #6fdc5a00 70%); }
+.impact.k-buff { background: radial-gradient(circle, #fff1b8 0%, #f2c66b99 40%, #f2c66b00 70%); }
+.impact.k-self { background: radial-gradient(circle, #ffffff 0%, #8fc6ffaa 40%, #8fc6ff00 70%); }
+.impact-n { font-size: 30px; font-weight: 900; color: #fff; text-shadow: 0 0 6px #000, 0 2px 0 #000; }
+.impact.k-damage .impact-n { color: #ffdfd6; }
+.impact.k-heal .impact-n { color: #d9ffcc; }
+@keyframes impact { 0% { opacity: 0; transform: scale(.4); } 25% { opacity: 1; transform: scale(1.1); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.25); } }

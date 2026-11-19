@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useState, useCallback } from "react";
 import { api, setCsrf } from "./api.js";
 import { Card } from "./Card.jsx";
-import { GameBoard } from "./Game.jsx";
+import { GameBoard, HoverPreview } from "./Game.jsx";
 import "./styles.css";
 
 function Auth({ onLogin }) {
@@ -82,6 +82,7 @@ function ManaCurve({ deck }) {
 }
 
 function DeckList({ deck }) {
+  const [hover, setHover] = useState(null);
   const grouped = {};
   deck.forEach((c) => {
     grouped[c.id] = grouped[c.id] || { card: c, n: 0 };
@@ -94,13 +95,17 @@ function DeckList({ deck }) {
       <ManaCurve deck={deck} />
       <ul>
         {rows.map(({ card, n }) => (
-          <li key={card.id} title={card.text.replace(/<[^>]+>/g, "")}>
+          <li key={card.id}
+            onMouseEnter={(e) => setHover({ card, x: e.clientX, y: e.clientY })}
+            onMouseMove={(e) => setHover({ card, x: e.clientX, y: e.clientY })}
+            onMouseLeave={() => setHover(null)}>
             <span className="dl-cost">{card.cost}</span>
             <span className="dl-name">{card.name}</span>
             {n > 1 && <span className="dl-n">×{n}</span>}
           </li>
         ))}
       </ul>
+      <HoverPreview hover={hover} />
     </div>
   );
 }

@@ -153,3 +153,18 @@ def test_arugal_y_dorian_reaccionan_al_robar_esbirro():
     p.draw()  # el mazo es de Yetis
     assert len(p.hand) == 2            # el Yeti + copia de Arugal
     assert len(p.field) == field_before + 1   # copia 1/1 de Dorian
+
+
+def test_hidra_de_cueva_dana_a_los_adyacentes():
+    from fireplace.actions import Summon
+    g = _game(hero1="HERO_05")
+    p, o = g.player1, g.player2
+    p.max_mana = 10
+    p.discard_hand()
+    hydra = p.give("LOOT_078").play()
+    for _ in range(3):
+        Summon(o, "CS2_182").trigger(o)
+    g.end_turn()
+    g.end_turn()
+    hydra.attack(o.field[1])
+    assert [m.health for m in o.field] == [3, 3, 3]

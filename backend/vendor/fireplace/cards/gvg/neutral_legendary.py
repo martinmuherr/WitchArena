@@ -45,7 +45,8 @@ class GVG_112:
 class GVG_113:
     """Foe Reaper 4000"""
 
-    events = Attack(SELF).on(CLEAVE)
+    # HS_WitchArena: CLEAVE usaba TARGET, que en un evento de ataque no es el defensor
+    events = Attack(SELF).on(Hit(ADJACENT(Attack.DEFENDER), ATK(SELF)))
 
 
 class GVG_114:

@@ -12,7 +12,7 @@ const DRAG_THRESHOLD = 6; // px antes de considerar que empiezas a arrastrar
 
 // ---------------------------------------------------------------- vista previa al pasar el ratón
 // Muestra la carta ORIGINAL (coste y estadísticas base) y, al lado, las mejoras que tiene.
-function HoverPreview({ hover }) {
+export function HoverPreview({ hover }) {
   const ref = useRef(null);
   const [pos, setPos] = useState({ left: -9999, top: -9999 });
   useLayoutEffect(() => {
@@ -134,6 +134,44 @@ function center(r) {
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
+// Proyectil de un hechizo o poder de héroe: sale del origen, vuela al objetivo y estalla.
+function Projectile({ fx, onDone }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const dx = fx.to.x - fx.from.x;
+    const dy = fx.to.y - fx.from.y;
+    const travel = fx.kind === "self" ? 0 : 450;
+    if (el.animate && travel) {
+      el.animate(
+        [
+          { transform: "translate(-50%,-50%) translate(0px,0px) scale(.7)", opacity: 0.2 },
+          { transform: `translate(-50%,-50%) translate(${dx * 0.5}px,${dy * 0.5 - 40}px) scale(1.15)`, opacity: 1, offset: 0.5 },
+          { transform: `translate(-50%,-50%) translate(${dx}px,${dy}px) scale(1)`, opacity: 1 },
+        ],
+        { duration: travel, easing: "ease-in", fill: "forwards" },
+      );
+    }
+    const t = setTimeout(onDone, travel + 750);
+    return () => clearTimeout(t);
+  }, []);
+  const travel = fx.kind === "self" ? 0 : 450;
+  const url = fx.icon ? `url(/assets/icons/${fx.icon}.svg)` : null;
+  return (
+    <>
+      {fx.kind !== "self" && (
+        <div ref={ref} className={"projectile k-" + fx.kind} style={{ left: fx.from.x + "px", top: fx.from.y + "px" }}>
+          {url && <div className={"proj-icon c-" + (fx.cls || "neutral")} style={{ maskImage: url, WebkitMaskImage: url }} />}
+        </div>
+      )}
+      <div className={"impact k-" + fx.kind} style={{ left: fx.to.x + "px", top: fx.to.y + "px", animationDelay: travel + "ms" }}>
+        {fx.amount ? <span className="impact-n">{fx.kind === "heal" ? "+" : "-"}{fx.amount}</span> : null}
+      </div>
+    </>
+  );
+}
+
 function Arrow({ from, to, className }) {
   if (!from || !to) return null;
   const midY = Math.min(from.y, to.y) - 60;
@@ -160,6 +198,8 @@ export function GameBoard({ gameId, onExit }) {
   const [drag, setDrag] = useState(null); // carta arrastrada desde la mano
   const [hover, setHover] = useState(null);
   const [attackAnim, setAttackAnim] = useState(null);
+  const [effects, setEffects] = useState([]);
+  const lastEffectSeq = useRef(null);
   const left = useCountdown(view);
   const esRef = useRef(null);
   const handRef = useRef(null);
@@ -254,6 +294,28 @@ export function GameBoard({ gameId, onExit }) {
     }
     if (la) lastAttackSeq.current = la.seq;
     else if (lastAttackSeq.current === null) lastAttackSeq.current = 0;
+
+    // hechizos / poderes de héroe / gritos de batalla: proyectil hacia cada afectado
+    const le = view.last_effect;
+    if (le && lastEffectSeq.current !== null && le.seq !== lastEffectSeq.current) {
+      const rectOf = (eid) => {
+        const el = document.querySelector(`.board [data-eid="${eid}"]`);
+        return (el && el.getBoundingClientRect()) || rectsRef.current[eid];
+      };
+      const rs = rectOf(le.source);
+      if (rs) {
+        const from = center(rs);
+        const list = [];
+        le.hits.forEach((h, i) => {
+          const rt = h.died ? rectsRef.current[h.eid] || rectOf(h.eid) : rectOf(h.eid);
+          if (!rt) return;
+          list.push({ id: le.seq + "-" + i, from, to: center(rt), kind: h.kind, amount: h.amount, icon: le.icon, cls: le.class_key });
+        });
+        if (list.length) setEffects((cur) => [...cur, ...list]);
+      }
+    }
+    if (le) lastEffectSeq.current = le.seq;
+    else if (lastEffectSeq.current === null) lastEffectSeq.current = 0;
     // guardamos dónde está cada entidad para la próxima animación
     const rects = {};
     document.querySelectorAll(".board [data-eid]").forEach((el) => {
@@ -359,6 +421,11 @@ export function GameBoard({ gameId, onExit }) {
         if (cur && !cur.card.playable) setError("No puedes jugar esa carta ahora");
         return;
       }
+      // Al soltar, el navegador lanza también un "click" sobre lo que haya debajo. Ese click
+      // cancelaba la flecha del Grito de batalla (o elegía objetivo sin querer): lo anulamos.
+      const swallow = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
+      window.addEventListener("click", swallow, { capture: true, once: true });
+      setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 250);
       if (!outOfHand(ev.clientY)) return; // la devolviste a la mano
       dropCard(cur, ev);
     };
@@ -493,6 +560,9 @@ export function GameBoard({ gameId, onExit }) {
       {drag && drag.arrow && <Arrow from={drag.from} to={{ x: drag.x, y: drag.y }} className="aim" />}
       {sel && sel.from && mouse && <Arrow from={sel.from} to={mouse} className="aim" />}
       {attackAnim && <Arrow from={attackAnim.from} to={attackAnim.to} className="attack" />}
+      {effects.map((fx) => (
+        <Projectile key={fx.id} fx={fx} onDone={() => setEffects((cur) => cur.filter((x) => x.id !== fx.id))} />
+      ))}
 
       {sel && <div className="sel-hint">Elige un objetivo resaltado (Esc o clic fuera para cancelar)</div>}
       {error && <div className="toast error" onClick={() => setError(null)}>{error}</div>}

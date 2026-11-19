@@ -9,7 +9,8 @@ class LOOT_078:
     """Cave Hydra"""
 
     # Also damages the minions next to whomever this attacks.
-    events = Attack(SELF).on(CLEAVE)
+    # HS_WitchArena: CLEAVE usaba TARGET, que en un evento de ataque no es el defensor
+    events = Attack(SELF).on(Hit(ADJACENT(Attack.DEFENDER), ATK(SELF)))
 
 
 class LOOT_511:

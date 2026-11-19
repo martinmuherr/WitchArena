@@ -40,6 +40,7 @@ class GameSession:
         self.log = []          # cada entrada: lista de trozos {"t": texto} o {"card": vista}
         self.last_attack = None  # {"seq", "attacker", "defender"} para animar el ataque
         self._attack_seq = 0
+        self.last_effect = None  # hechizo/poder/grito de batalla: a quién afectó (para animarlo)
         self.winner_user_id = None
         self.finished = False
         self.finish_reason = None
@@ -153,7 +154,11 @@ class GameSession:
         entry = [{"t": "%s juega " % p.name}, self._ref(card)]
         if tgt is not None:
             entry += [{"t": " sobre "}, self._ref(tgt)]
+        before = self._snapshot()
+        source = card.entity_id if card.type == CardType.MINION else p.hero.entity_id
+        cid = card.id
         self._run(lambda: card.play(target=tgt, index=index, choose=ch))
+        self._record_effect(before, source, cid, tgt)
         self._bump(entry)
 
     def attack(self, user_id, attacker_id, defender_id):
@@ -186,8 +191,46 @@ class GameSession:
         entry = [{"t": "%s usa " % p.name}, self._ref(power)]
         if tgt is not None:
             entry += [{"t": " sobre "}, self._ref(tgt)]
+        before = self._snapshot()
         self._run(lambda: power.use(target=tgt, choose=ch))
+        self._record_effect(before, power.entity_id, power.id, tgt, is_power=True)
         self._bump(entry)
+
+    # ------------------------------------------------------------ efectos visuales
+    def _snapshot(self):
+        snap = {}
+        for pl in self.players:
+            for ch in [pl.hero] + list(pl.field):
+                snap[ch.entity_id] = (ch.health + getattr(ch, "armor", 0), ch.atk, ch.max_health)
+        return snap
+
+    def _record_effect(self, before, source_eid, card_id, target, is_power=False):
+        after = self._snapshot()
+        hits = []
+        for eid, (hp, atk, mx) in before.items():
+            if eid == source_eid and not is_power:
+                continue
+            now = after.get(eid)
+            if now is None:  # murió
+                hits.append({"eid": eid, "kind": "damage", "amount": hp, "died": True})
+                continue
+            if now[0] < hp:
+                hits.append({"eid": eid, "kind": "damage", "amount": hp - now[0]})
+            elif now[0] > hp and now[2] == mx:
+                hits.append({"eid": eid, "kind": "heal", "amount": now[0] - hp})
+            elif now[1] != atk or now[2] != mx:
+                hits.append({"eid": eid, "kind": "buff", "amount": None})
+        if target is not None and not any(h["eid"] == target.entity_id for h in hits):
+            hits.append({"eid": target.entity_id, "kind": "touch", "amount": None})
+        if not hits and is_power:
+            # poderes sin objetivo (Blindaje, Llamada totémica...): brillo en el propio poder
+            hits.append({"eid": source_eid, "kind": "self", "amount": None})
+        if not hits:
+            return
+        v = C.card_view(card_id)
+        self._effect_seq = getattr(self, "_effect_seq", 0) + 1
+        self.last_effect = {"seq": self._effect_seq, "source": source_eid, "hits": hits[:10],
+                            "icon": v.get("icon"), "class_key": v.get("class_key"), "power": is_power}
 
     def end_turn(self, user_id=None, forced=False):
         p = self.game.current_player
@@ -341,4 +384,5 @@ class GameSession:
             "winner": winner,
             "log": self.log[-12:],
             "last_attack": self.last_attack,
+            "last_effect": self.last_effect,
         }
