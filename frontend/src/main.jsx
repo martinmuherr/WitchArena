@@ -55,12 +55,15 @@ function Auth({ onLogin }) {
 function Disclaimer() {
   return (
     <p className="disclaimer">
-      Proyecto de fans sin ánimo de lucro. Hearthstone y sus cartas son propiedad de Blizzard Entertainment;
+      Proyecto de fans sin ánimo de lucro. Hearthstone, sus cartas y su arte son propiedad de Blizzard Entertainment;
       este sitio no está afiliado ni respaldado por Blizzard. Iconos de{" "}
       <a href="https://game-icons.net" target="_blank" rel="noopener noreferrer">game-icons.net</a>{" "}
       (Lorc, Delapouite y otros autores), licencia{" "}
       <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a>.{" "}
       <a href="https://github.com/martinmuherr/WitchArena" target="_blank" rel="noopener noreferrer">Código fuente (AGPL-3.0)</a>.
+      <br />
+      Arte de las cartas © Blizzard Entertainment, Inc., obtenido de{" "}
+      <a href="https://hearthstonejson.com/docs/images.html" target="_blank" rel="noopener noreferrer">HearthstoneJSON</a> (HearthSim).
     </p>
   );
 }

@@ -33,6 +33,21 @@ const RARITY_CLASS = {
   "Común": "r-common", "Básica": "r-free", "Rara": "r-rare", "Épica": "r-epic", "Legendaria": "r-legendary",
 };
 
+import { useState } from "react";
+import { ART_BASE, CARD_ART } from "./config.js";
+
+// Arte de la carta (HearthstoneJSON). Si falla o está desactivado, usamos el icono.
+export function CardArt({ id, icon, cls, className }) {
+  const [failed, setFailed] = useState(false);
+  if (!CARD_ART || !id || failed) return <Art icon={icon} cls={cls} className={(className || "art") + " art-fallback"} />;
+  return (
+    <div className={(className || "art") + " art-img"}>
+      <img src={ART_BASE + id + ".jpg"} alt="" loading="lazy" draggable="false"
+        referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
 // Icono de game-icons.net (CC BY 3.0) teñido con el color de la clase mediante una máscara CSS.
 export function Art({ icon, cls, className }) {
   if (!icon) return null;
@@ -53,7 +68,7 @@ export function Card({ card, onClick, selected, highlight, dim, small, base }) {
     <div className={cls} onClick={onClick}>
       <div className={"cost" + (costChanged ? " changed" : "")}>{card.cost}</div>
       <div className="card-name">{card.name}</div>
-      <Art icon={card.icon} cls={card.class_key} />
+      <CardArt id={card.id} icon={card.icon} cls={card.class_key} />
       <div className="card-type">
         {card.type}{card.races && card.races.length ? " · " + card.races.map(raceEs).join(", ") : ""}
       </div>

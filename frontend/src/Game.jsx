@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api.js";
-import { Art, Card, CardBack, RichText } from "./Card.jsx";
+import { Art, Card, CardArt, CardBack, RichText } from "./Card.jsx";
 
 const FLAG_ES = {
   taunt: "Provocar", divine_shield: "Escudo divino", stealthed: "Sigilo", frozen: "Congelado",
@@ -65,8 +65,8 @@ function Minion({ m, onClick, targetable, active, canAct, hoverProps }) {
   return (
     <div className={cls} onClick={onClick} data-eid={m.eid} {...hoverProps(m)}>
       {flags.includes("taunt") && <div className="taunt-shield" />}
+      <CardArt id={m.id} icon={m.icon} cls={m.class_key} className="m-art" />
       <div className="m-body">
-        <Art icon={m.icon} cls={m.class_key} className="m-art" />
         <div className="m-name">{m.name}</div>
         {m.text && <div className="m-text"><RichText text={m.text} /></div>}
       </div>
@@ -88,7 +88,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
       <div className="weapon-slot">
         {side.weapon && (
           <div className="weapon" data-eid={side.weapon.eid} {...hoverProps(side.weapon)}>
-            <Art icon={side.weapon.icon} cls={side.weapon.class_key} className="w-art" />
+            <CardArt id={side.weapon.id} icon={side.weapon.icon} cls={side.weapon.class_key} className="w-art" />
             <span className="w-name">{side.weapon.name}</span>
             <span className="stat atk" title="Daño">{side.weapon.atk}</span>
             <span className="stat dur" title="Durabilidad">{side.weapon.durability}</span>
@@ -97,7 +97,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
       </div>
       <div className={"hero " + (targetable ? "targetable " : "") + (active ? "active " : "") + (canAct ? "can-act " : "") + (onClick ? "clickable" : "")}
         onClick={onClick} data-eid={h.eid}>
-        <Art icon={h.icon} cls={h.class_key} className="h-art" />
+        <CardArt id={h.id} icon={h.icon} cls={h.class_key} className="h-art" />
         <div className="h-name">{side.name}</div>
         <div className="h-class">{h.name}</div>
         {h.atk > 0 && <div className="stat atk">{h.atk}</div>}
@@ -112,7 +112,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
       <div className={"power " + (powerUsable ? "usable " : "used ") + (powerActive ? "active" : "")}
         onClick={mine && powerUsable ? onPower : undefined} data-eid={side.power.eid} {...hoverProps(side.power)}>
         <span className="cost">{side.power.cost}</span>
-        <Art icon={side.power.icon} cls={side.power.class_key} className="p-art" />
+        <CardArt id={side.power.id} icon={side.power.icon} cls={side.power.class_key} className="p-art" />
         <span className="p-name">{side.power.name}</span>
       </div>
     </div>
@@ -610,6 +610,7 @@ export function GameBoard({ gameId, onExit }) {
           <button className="primary" onClick={onExit}>Volver al Arena</button>
         </div>
       )}
+      <div className="board-credit">Arte © Blizzard Entertainment, vía HearthstoneJSON · Proyecto de fans sin ánimo de lucro</div>
       {!view.finished && (
         <button className="concede" onClick={() => window.confirm("¿Seguro que quieres rendirte?") && send({ type: "concede" })}>
           Rendirse

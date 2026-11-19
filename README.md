@@ -27,7 +27,8 @@ WitchArena es una web hecha por fans para jugar el **modo Arena de Hearthstone e
 - 🧙 **Draft completo**: eliges entre 3 clases y haces 30 elecciones de 1 entre 3 cartas.
 - ⚔️ **Partidas contra otras personas** en tiempo real, con mulligan, Descubrir, Elige una opción, secretos y armas.
 - 🏆 **Runs de Arena reales**: hasta **12 victorias o 3 derrotas**, con historial.
-- 📜 **Cartas en español** con sus textos de 2018, sin arte de Blizzard: cada carta lleva un icono libre relacionado con ella.
+- 📜 **Cartas en español** con sus textos de 2018 y su arte, que el navegador carga desde HearthstoneJSON (con iconos libres de respaldo).
+- 🍺 **Mesa de taberna** de diseño propio.
 - 🖐️ **Cartas que se arrastran**: coloca cada esbirro en el hueco que quieras de tu fila; los hechizos con objetivo se convierten en una flecha al salir de la mano.
 - 🎯 **Flechas de ataque** que siguen al ratón y animación de ataque visible para los dos jugadores.
 - 🔍 **Vista previa al pasar el ratón** (en la mesa y en el registro): la carta original con sus valores base y las mejoras que tiene encima, y de dónde vienen.
@@ -187,9 +188,9 @@ python tools/e2e_api.py http://127.0.0.1:8000 usuario1 clave1 usuario2 clave2
 
 - **Motor:** [Fireplace](https://github.com/jleclanche/fireplace) de Jerome Leclanche y colaboradores (AGPL-3.0), con cambios marcados como `HS_WitchArena`.
 - **Datos de cartas:** [python-hearthstone](https://github.com/HearthSim/python-hearthstone) y [hsdata](https://github.com/HearthSim/hsdata) de HearthSim.
-- **Iconos:** [game-icons.net](https://game-icons.net) (Lorc, Delapouite y otros autores), licencia [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+- **Arte de las cartas:** © Blizzard Entertainment, Inc. No está incluido en este repositorio: el navegador de cada jugador lo descarga de la [API de imágenes de HearthstoneJSON](https://hearthstonejson.com/docs/images.html) (HearthSim). Para desactivarlo basta con poner `CARD_ART = false` en [`frontend/src/config.js`](frontend/src/config.js) y recompilar.
+- **Iconos de respaldo:** [game-icons.net](https://game-icons.net) (Lorc, Delapouite y otros autores), licencia [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
 - Este proyecto se distribuye bajo **AGPL-3.0** (ver [`LICENSE`](LICENSE)), igual que Fireplace.
 
-> **Aviso:** WitchArena es un proyecto de fans **sin ánimo de lucro**. Hearthstone, sus cartas, nombres y textos
-> son propiedad de **Blizzard Entertainment**. Este sitio no está afiliado ni respaldado por Blizzard y no usa
-> ningún arte del juego.
+> **Aviso:** WitchArena es un proyecto de fans **sin ánimo de lucro**. Hearthstone, sus cartas, nombres, textos y
+> arte son propiedad de **Blizzard Entertainment**. Este sitio no está afiliado ni respaldado por Blizzard.

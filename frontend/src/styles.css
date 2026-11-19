@@ -288,3 +288,64 @@ label { display: block; margin: 12px 0; font-size: 14px; color: var(--muted); }
 .impact.k-damage .impact-n { color: #ffdfd6; }
 .impact.k-heal .impact-n { color: #d9ffcc; }
 @keyframes impact { 0% { opacity: 0; transform: scale(.4); } 25% { opacity: 1; transform: scale(1.1); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.25); } }
+
+/* ===================== Arte de las cartas (HearthstoneJSON) ===================== */
+.art-img { background: none !important; mask: none !important; -webkit-mask: none !important; overflow: hidden; }
+.art-img img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; user-select: none; }
+/* carta: ventana ovalada de arte */
+.card .art.art-img { width: calc(100% + 8px); margin: -6px -4px 6px; height: 104px; border-radius: 50% / 42%; border: 2px solid #00000088; box-shadow: inset 0 0 12px #000a; }
+.card-small .art.art-img { height: 56px; margin-bottom: 3px; }
+.offer .card .art.art-img, .hover-preview .card .art.art-img { height: 118px; }
+/* esbirro en la mesa: el arte ocupa el óvalo y el nombre va encima con sombra */
+.minion { overflow: visible; }
+.minion .m-art.art-img { position: absolute; inset: 0; width: auto; height: auto; margin: 0; border-radius: 46px 46px 12px 12px; z-index: 0; }
+.minion .m-art.art-img img { object-position: 50% 30%; filter: saturate(1.05); }
+.minion .m-art.art-img::after { content: ""; position: absolute; inset: 0; background: linear-gradient(#0000 35%, #000c 78%); }
+.minion .m-body { z-index: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 14px; }
+.minion:has(.art-img) .m-name { text-shadow: 0 1px 3px #000, 0 0 6px #000; }
+.minion:has(.art-img) .m-text { display: none; }
+.minion .stat { z-index: 2; }
+/* héroe, arma y poder: retrato circular */
+.hero .h-art.art-img { position: absolute; inset: 0; width: auto; height: auto; margin: 0; border-radius: 50% 50% 16px 16px; z-index: 0; }
+.hero .h-art.art-img::after { content: ""; position: absolute; inset: 0; background: linear-gradient(#0000 45%, #000d 90%); }
+.hero > *:not(.h-art) { position: relative; z-index: 1; }
+.hero .stat, .hero .secrets { position: absolute; z-index: 2; }
+.hero:has(.art-img) { justify-content: flex-end; padding-bottom: 12px; }
+.hero:has(.art-img) .h-name, .hero:has(.art-img) .h-class { text-shadow: 0 1px 3px #000; }
+.weapon .w-art.art-img, .power .p-art.art-img { position: absolute; inset: 0; width: auto; height: auto; border-radius: 50%; z-index: 0; }
+.weapon:has(.art-img) .w-name, .power:has(.art-img) .p-name { position: relative; z-index: 1; text-shadow: 0 1px 3px #000, 0 0 5px #000; font-weight: 700; }
+.weapon .stat, .power .cost { z-index: 2; }
+.power.used .p-art.art-img { filter: grayscale(1) brightness(.6); }
+.board-credit { position: fixed; bottom: 4px; right: 10px; font-size: 10px; color: #c9b48a88; pointer-events: none; }
+
+/* ===================== Fondo de taberna (diseño propio) ===================== */
+body {
+  background:
+    radial-gradient(ellipse at 15% 10%, #ffb34733 0%, #ffb34700 35%),
+    radial-gradient(ellipse at 85% 12%, #ffb34729 0%, #ffb34700 35%),
+    repeating-linear-gradient(90deg, #3a2414 0px, #43291a 46px, #2f1d10 48px, #3d2617 94px, #2c1b0f 96px),
+    #2c1b0f;
+  background-attachment: fixed;
+}
+body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1;
+  background: radial-gradient(ellipse at center, #0000 40%, #000b 100%); }
+.board {
+  background:
+    radial-gradient(ellipse 60% 48% at 50% 50%, #7a5a33 0%, #5d4224 55%, #3e2a16 80%, #0000 100%),
+    radial-gradient(ellipse at 50% 50%, #0000 55%, #000a 100%),
+    repeating-linear-gradient(90deg, #3a2414 0px, #43291a 46px, #2f1d10 48px, #3d2617 94px, #2c1b0f 96px);
+}
+.board::before { content: ""; position: absolute; left: 7%; right: 7%; top: 15%; bottom: 25%; border-radius: 48% / 40%;
+  border: 6px solid #2a1a0c; box-shadow: inset 0 0 40px #0008, 0 0 0 3px #b8873d55; pointer-events: none; }
+.midline { border-color: #f2c66b22; position: relative; z-index: 1; }
+.panel, .decklist { background: #2a1d12ee; border-color: #6b4a26; }
+.minion { background: linear-gradient(#4a3a26, #261b10); border-color: #8a6a32; }
+/* ajustes tras la primera prueba con arte */
+.card .art.art-img { margin: 4px -4px 6px; }
+.card-small .art.art-img { margin: 2px -2px 3px; }
+.minion .m-body { position: absolute; left: 4px; right: 4px; bottom: 16px; height: auto; padding: 0; z-index: 1; display: block; }
+.minion:has(.art-img) .m-name { color: #ffe2a0; font-size: 11px; line-height: 1.15; }
+.card { background: linear-gradient(#3d2c1b, #21160d); border-color: #6b4a26; }
+/* sin arte (iconos de respaldo) el esbirro mantiene su diseño anterior */
+.minion .m-art.art-fallback { position: relative; z-index: 1; margin: -4px auto 2px; }
+.minion:has(.art-fallback) .m-body { position: relative; left: 0; right: 0; bottom: 0; }
