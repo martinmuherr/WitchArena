@@ -117,6 +117,10 @@ def arena_pool():
             continue
         if c.name in R.BANNED_NAMES:
             continue
+        # Los héroes básicos (Jaina, Garrosh...) son "cartas" en los datos, pero no se draftean.
+        # Las cartas de héroe de verdad (p. ej. Hagatha, la Bruja) sí.
+        if c.type == CardType.HERO and (c.card_set == CardSet.BASIC or cid in R.CLASSES.values()):
+            continue
         rarity = _effective_rarity(c)
         weight = R.NEWEST_SET_WEIGHT if c.card_set == R.NEWEST_SET else 1.0
         if c.card_class == CardClass.NEUTRAL:

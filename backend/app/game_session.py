@@ -37,7 +37,9 @@ class GameSession:
         self.players = players
         self.user_index = {s["user_id"]: i for i, s in enumerate(seats)}
         self.version = 0
-        self.log = []
+        self.log = []          # cada entrada: lista de trozos {"t": texto} o {"card": vista}
+        self.last_attack = None  # {"seq", "attacker", "defender"} para animar el ataque
+        self._attack_seq = 0
         self.winner_user_id = None
         self.finished = False
         self.finish_reason = None
@@ -52,8 +54,15 @@ class GameSession:
     def _bump(self, text=None):
         self.version += 1
         if text:
+            if isinstance(text, str):
+                text = [{"t": text}]
             self.log.append(text)
             self.log = self.log[-30:]
+
+    @staticmethod
+    def _ref(entity):
+        """Trozo de log que enlaza a una carta (para el hover)."""
+        return {"card": C.card_view(entity.id)}
 
     def player_of(self, user_id):
         if user_id not in self.user_index:
@@ -141,9 +150,11 @@ class GameSession:
         index = None
         if card.type == CardType.MINION and position is not None:
             index = max(0, min(int(position), len(p.field)))
-        name = C.card_view(card.id)["name"]
+        entry = [{"t": "%s juega " % p.name}, self._ref(card)]
+        if tgt is not None:
+            entry += [{"t": " sobre "}, self._ref(tgt)]
         self._run(lambda: card.play(target=tgt, index=index, choose=ch))
-        self._bump("%s juega %s" % (p.name, name))
+        self._bump(entry)
 
     def attack(self, user_id, attacker_id, defender_id):
         p = self.player_of(user_id)
@@ -154,8 +165,11 @@ class GameSession:
             raise ActionError("Ese personaje no es tuyo")
         if not att.can_attack(dfn):
             raise ActionError("No puede atacar a ese objetivo")
+        entry = [{"t": "%s: " % p.name}, self._ref(att), {"t": " ataca a "}, self._ref(dfn)]
+        self._attack_seq += 1
+        self.last_attack = {"seq": self._attack_seq, "attacker": att.entity_id, "defender": dfn.entity_id}
         self._run(lambda: att.attack(dfn))
-        self._bump("%s ataca" % p.name)
+        self._bump(entry)
 
     def hero_power(self, user_id, target=None, choose=None):
         p = self.player_of(user_id)
@@ -169,8 +183,11 @@ class GameSession:
             ch = next((c for c in power.choose_cards if c.entity_id == choose), None)
             if ch is None:
                 raise ActionError("Debes elegir una opción")
+        entry = [{"t": "%s usa " % p.name}, self._ref(power)]
+        if tgt is not None:
+            entry += [{"t": " sobre "}, self._ref(tgt)]
         self._run(lambda: power.use(target=tgt, choose=ch))
-        self._bump("%s usa su poder de héroe" % p.name)
+        self._bump(entry)
 
     def end_turn(self, user_id=None, forced=False):
         p = self.game.current_player
@@ -212,6 +229,19 @@ class GameSession:
         v = C.card_view(c.id)
         v = dict(v)
         v["eid"] = c.entity_id
+        # valores originales de la carta (para el hover) y mejoras que tiene encima
+        v["base"] = {k: v.get(k) for k in ("cost", "atk", "health", "durability")}
+        buffs = []
+        for b in getattr(c, "buffs", None) or []:
+            try:
+                bv = C.card_view(b.id)
+                src = getattr(b, "source", None)
+                buffs.append({"name": bv["name"], "text": bv["text"],
+                              "source": C.card_view(src.id)["name"] if src is not None and src is not c else None})
+            except Exception:
+                continue
+        if buffs:
+            v["buffs"] = buffs
         if c.type in (CardType.MINION, CardType.HERO):
             v["atk"] = c.atk
             v["health"] = c.health
@@ -309,5 +339,6 @@ class GameSession:
             "choice": choice,
             "finished": self.finished,
             "winner": winner,
-            "log": self.log[-10:],
+            "log": self.log[-12:],
+            "last_attack": self.last_attack,
         }

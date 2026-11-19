@@ -31,7 +31,8 @@ class GIL_640:
     """Curio Collector"""
 
     # Whenever you draw a card, gain +1/+1.
-    events = Draw(CONTROLLER).after(Buff(Draw.CARD, "GIL_640e"))
+    # HS_WitchArena: el buff es para el propio Coleccionista, no para la carta robada
+    events = Draw(CONTROLLER).on(Buff(SELF, "GIL_640e"))
 
 
 GIL_640e = buff(+1, +1)

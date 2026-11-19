@@ -216,3 +216,50 @@ label { display: block; margin: 12px 0; font-size: 14px; color: var(--muted); }
 .credits a { color: #8f8770; }
 .art, .m-art, .h-art, .w-art, .p-art { background-image: none !important; }
 .disclaimer a { color: #b9a77a; }
+
+/* ---------- Provocar: silueta de escudo detrás del esbirro ---------- */
+.field { position: relative; z-index: 0; }
+.minion.f-taunt { border: 2px solid #55664c; border-radius: 48px 48px 14px 14px; }
+.taunt-shield {
+  position: absolute; left: -16px; right: -16px; top: -14px; bottom: -18px; z-index: -1;
+  background: linear-gradient(160deg, #c9ccd1 0%, #8a9098 45%, #5a5f66 100%);
+  clip-path: polygon(50% 0%, 100% 10%, 100% 52%, 86% 78%, 50% 100%, 14% 78%, 0% 52%, 0% 10%);
+  filter: drop-shadow(0 0 3px #000);
+}
+.taunt-shield::after {
+  content: ""; position: absolute; inset: 5px;
+  background: linear-gradient(160deg, #6f757c, #3c4046);
+  clip-path: polygon(50% 0%, 100% 10%, 100% 52%, 86% 78%, 50% 100%, 14% 78%, 0% 52%, 0% 10%);
+}
+.minion .m-body { position: relative; }
+/* Escudo divino: halo dorado (bien distinto del escudo gris de Provocar) */
+.minion.f-divine_shield { box-shadow: 0 0 0 3px #f6e27a, 0 0 22px 6px #f6e27acc; }
+.stat.up { color: #9dff8a; }
+
+/* ---------- Arrastrar cartas ---------- */
+.hand-slot { touch-action: none; cursor: grab; transition: transform .12s, opacity .12s; }
+.hand-slot:hover { transform: translateY(-10px); }
+.hand-slot.lifted { opacity: .25; }
+.board.dragging, .board.dragging * { cursor: grabbing !important; user-select: none; }
+.drag-ghost { position: fixed; z-index: 40; pointer-events: none; transform: translate(-50%, -60%) rotate(-3deg); filter: drop-shadow(0 12px 20px #000c); }
+.drop-slot { width: 70px; height: 118px; border: 2px dashed var(--amber2); border-radius: 48px 48px 14px 14px; background: #f2c66b18; }
+.field.drop-active { outline: 1px dashed #f2c66b55; outline-offset: 6px; border-radius: 14px; }
+
+/* ---------- Flechas ---------- */
+.arrow-layer.attack .arrow-line { stroke: #ffb347; stroke-dasharray: none; stroke-width: 8; animation: attack-fade .9s ease-out forwards; }
+.arrow-layer.attack .arrow-head { fill: #ffb347; }
+@keyframes attack-fade { 0% { opacity: 0; } 15% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ---------- Vista previa al pasar el ratón ---------- */
+.hover-preview { position: fixed; z-index: 50; pointer-events: none; display: flex; gap: 10px; align-items: flex-start; }
+.hover-preview .card { width: 190px; height: 262px; }
+.hover-buffs { background: #141912ee; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; max-width: 220px; font-size: 12px; }
+.hover-buffs h4 { margin: 0 0 6px; color: var(--amber2); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.hover-buffs .buff { margin-bottom: 6px; }
+.hover-buffs .buff-src { color: var(--muted); font-size: 11px; }
+.hover-flags { color: #cfe3ff; margin-top: 4px; }
+.hover-now { color: #9dff8a; margin-top: 4px; font-weight: 700; }
+
+/* ---------- Log con cartas ---------- */
+.log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
+.log-card { color: var(--amber2); border-bottom: 1px dotted #f2c66b88; cursor: help; }

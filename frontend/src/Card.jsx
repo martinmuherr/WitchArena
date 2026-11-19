@@ -50,7 +50,7 @@ export function Card({ card, onClick, selected, highlight, dim, small, base }) {
   const isWeapon = card.type === "Arma";
   const costChanged = base && base.cost !== undefined && base.cost !== card.cost;
   return (
-    <div className={cls} onClick={onClick} title={card.name}>
+    <div className={cls} onClick={onClick}>
       <div className={"cost" + (costChanged ? " changed" : "")}>{card.cost}</div>
       <div className="card-name">{card.name}</div>
       <Art icon={card.icon} cls={card.class_key} />

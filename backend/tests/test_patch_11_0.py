@@ -7,6 +7,7 @@ from hearthstone.enums import CardClass, Race
 
 
 def _game(hero1="HERO_07", hero2="HERO_03"):
+    engine_db()
     deck = ["CS2_182"] * 30  # Yeti de invierno
     g = Game(players=[Player("A", list(deck), hero1), Player("B", list(deck), hero2)])
     g.start()
@@ -118,3 +119,37 @@ def test_arma_de_carta_permite_atacar():
     assert p.hero.can_attack()
     p.hero.attack(p.opponent.hero)
     assert p.opponent.hero.health == 27
+
+
+def test_coleccionista_de_bibelots_crece_al_robar():
+    g = _game(hero1="HERO_08")
+    p = g.player1
+    p.max_mana = 10
+    p.discard_hand()
+    curio = p.give("GIL_640").play()
+    base = (curio.atk, curio.health)
+    p.draw()
+    assert (curio.atk, curio.health) == (base[0] + 1, base[1] + 1)
+    assert all(not c.buffs for c in p.hand)
+
+
+def test_heroes_basicos_no_salen_en_el_draft():
+    from hearthstone.enums import CardType
+    db = engine_db()
+    ids = {cid for cls in arena_pool().values() for r in cls.values() for cid, _ in r}
+    heroes = {db[c].name for c in ids if db[c].type == CardType.HERO}
+    assert "Jaina Proudmoore" not in heroes and "Garrosh Hellscream" not in heroes
+    assert "Hagatha the Witch" in heroes
+
+
+def test_arugal_y_dorian_reaccionan_al_robar_esbirro():
+    g = _game(hero1="HERO_08")
+    p = g.player1
+    p.max_mana = 20
+    p.discard_hand()
+    p.give("GIL_691").play()   # Archimago Arugal
+    p.give("GIL_620").play()   # Maestro de muñecas Dorian
+    field_before = len(p.field)
+    p.draw()  # el mazo es de Yetis
+    assert len(p.hand) == 2            # el Yeti + copia de Arugal
+    assert len(p.field) == field_before + 1   # copia 1/1 de Dorian

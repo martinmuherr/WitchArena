@@ -1244,6 +1244,9 @@ class Draw(TargetedAction):
                 actions = card.get_actions("draw")
                 source.game.cheat_action(card, actions)
             self.broadcast(source, EventListener.ON, target, card, source)
+            # HS_WitchArena: Draw no emitía el evento AFTER, así que las cartas con
+            # "Draw(...).after(...)" (Archimago Arugal, Maestro de muñecas Dorian) no hacían nada.
+            self.broadcast(source, EventListener.AFTER, target, card, source)
 
         return [card]
 

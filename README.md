@@ -28,7 +28,10 @@ WitchArena es una web hecha por fans para jugar el **modo Arena de Hearthstone e
 - ⚔️ **Partidas contra otras personas** en tiempo real, con mulligan, Descubrir, Elige una opción, secretos y armas.
 - 🏆 **Runs de Arena reales**: hasta **12 victorias o 3 derrotas**, con historial.
 - 📜 **Cartas en español** con sus textos de 2018, sin arte de Blizzard: cada carta lleva un icono libre relacionado con ella.
-- 🎯 **Flechas de ataque** que siguen al ratón, temporizador de turno y registro de jugadas.
+- 🖐️ **Cartas que se arrastran**: coloca cada esbirro en el hueco que quieras de tu fila; los hechizos con objetivo se convierten en una flecha al salir de la mano.
+- 🎯 **Flechas de ataque** que siguen al ratón y animación de ataque visible para los dos jugadores.
+- 🔍 **Vista previa al pasar el ratón** (en la mesa y en el registro): la carta original con sus valores base y las mejoras que tiene encima, y de dónde vienen.
+- 🛡️ **Provocar** se ve como un escudo detrás del esbirro; **Escudo divino**, como un halo dorado.
 
 | Draft | Atacando |
 |:---:|:---:|
@@ -54,6 +57,7 @@ Sin abrir puertos del router ni exponer tu IP:
 1. **`descargar_cloudflared.bat`**: baja `cloudflared.exe` (versión portable oficial) a la carpeta `tunel/`.
 2. **`publicar.bat`**: arranca el servidor en **modo público** y abre un túnel. Al terminar te muestra la dirección
    `https://….trycloudflare.com` (también queda guardada en `tunel/url.txt`).
+3. **`reiniciar_servidor.bat`**: tras una actualización, reinicia solo el servidor; el túnel y su dirección se mantienen.
 
 En modo público (`PUBLIC_MODE=1`) las cookies solo viajan por HTTPS, el límite de intentos usa la IP real del
 visitante (`CF-Connecting-IP`) y las cuentas de prueba no pueden entrar. El Quick Tunnel es gratuito y no necesita
@@ -141,6 +145,7 @@ se han devuelto a su versión de 2018:
 | Castigo sagrado | **2** de daño a cualquier objetivo | 3 solo a esbirros |
 | Palabra de poder: escudo | +2 de salud **y roba una carta** | sin robo |
 | Poderes de héroe básicos | IDs de 2018 (`CS2_083b`…) enlazados al motor | renombrados a `HERO_0Xbp` |
+| Coleccionista de bibelots, Archimago Arugal, Maestro de muñecas Dorian | reaccionan al robar | fallo del motor corregido |
 
 **Pool de Arena:** Básico, Clásico, Viaje a Un'Goro, Caballeros del Trono Helado, Kóbolds y Catacumbas y
 El Bosque Embrujado (**878 cartas**). Excluye el Salón de la Fama y aplica la lista de cartas prohibidas de 2018

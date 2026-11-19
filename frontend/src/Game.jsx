@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { Art, Card, CardBack, RichText } from "./Card.jsx";
 
@@ -8,27 +8,75 @@ const FLAG_ES = {
   charge: "Cargar", silenced: "Silenciado", dormant: "Latente", cant_be_targeted_by_spells: "Elusivo",
 };
 
-function plain(t) {
-  return (t || "").replace(/<[^>]+>/g, "");
-}
+const DRAG_THRESHOLD = 6; // px antes de considerar que empiezas a arrastrar
 
-function Minion({ m, onClick, targetable, active, canAct }) {
-  const flags = m.flags || [];
-  const cls = ["minion", ...flags.map((f) => "f-" + f), targetable ? "targetable" : "",
-    active ? "active" : "", canAct ? "can-act" : "", onClick ? "clickable" : ""].join(" ");
-  const tip = m.name + (m.text ? " — " + plain(m.text) : "") + (flags.length ? " [" + flags.map((f) => FLAG_ES[f]).join(", ") + "]" : "");
+// ---------------------------------------------------------------- vista previa al pasar el ratón
+// Muestra la carta ORIGINAL (coste y estadísticas base) y, al lado, las mejoras que tiene.
+function HoverPreview({ hover }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState({ left: -9999, top: -9999 });
+  useLayoutEffect(() => {
+    if (!hover || !ref.current) return;
+    const w = ref.current.offsetWidth;
+    const h = ref.current.offsetHeight;
+    const gap = 18;
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+    // siempre hacia el centro de la pantalla
+    let left = hover.x < W / 2 ? hover.x + gap : hover.x - gap - w;
+    let top = hover.y < H / 2 ? hover.y + gap : hover.y - gap - h;
+    left = Math.max(8, Math.min(left, W - w - 8));
+    top = Math.max(8, Math.min(top, H - h - 8));
+    setPos({ left, top });
+  }, [hover && hover.x, hover && hover.y, hover && hover.card && hover.card.eid, hover && hover.card && hover.card.id]);
+  if (!hover || !hover.card || hover.card.hidden) return null;
+  const c = hover.card;
+  const base = { ...c, ...(c.base || {}) };
+  const buffs = c.buffs || [];
+  const flags = c.flags || [];
   return (
-    <div className={cls} onClick={onClick} title={tip}>
-      <Art icon={m.icon} cls={m.class_key} className="m-art" />
-      <div className="m-name">{m.name}</div>
-      {m.text && <div className="m-text"><RichText text={m.text} /></div>}
-      <div className="stat atk">{m.atk}</div>
-      <div className={"stat hp" + (m.damage ? " hurt" : "")}>{m.health}</div>
+    <div className="hover-preview" ref={ref} style={{ left: pos.left + "px", top: pos.top + "px" }}>
+      <Card card={base} />
+      {(buffs.length > 0 || flags.length > 0) && (
+        <div className="hover-buffs">
+          {buffs.length > 0 && <h4>Mejoras</h4>}
+          {buffs.map((b, i) => (
+            <div key={i} className="buff">
+              <b>{b.name}</b>
+              {b.text && <span>: <RichText text={b.text} /></span>}
+              {b.source && b.source !== b.name && <div className="buff-src">de {b.source}</div>}
+            </div>
+          ))}
+          {flags.length > 0 && <div className="hover-flags">{flags.map((f) => FLAG_ES[f] || f).join(" · ")}</div>}
+          {c.atk !== undefined && c.base && (c.atk !== c.base.atk || c.health !== c.base.health) && c.type === "Esbirro" && (
+            <div className="hover-now">Ahora: {c.atk}/{c.health}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerActive, powerUsable }) {
+function Minion({ m, onClick, targetable, active, canAct, hoverProps }) {
+  const flags = m.flags || [];
+  const cls = ["minion", ...flags.map((f) => "f-" + f), targetable ? "targetable" : "",
+    active ? "active" : "", canAct ? "can-act" : "", onClick ? "clickable" : ""].join(" ");
+  const buffed = m.base && m.base.atk !== undefined;
+  return (
+    <div className={cls} onClick={onClick} data-eid={m.eid} {...hoverProps(m)}>
+      {flags.includes("taunt") && <div className="taunt-shield" />}
+      <div className="m-body">
+        <Art icon={m.icon} cls={m.class_key} className="m-art" />
+        <div className="m-name">{m.name}</div>
+        {m.text && <div className="m-text"><RichText text={m.text} /></div>}
+      </div>
+      <div className={"stat atk" + (buffed && m.atk > m.base.atk ? " up" : "")}>{m.atk}</div>
+      <div className={"stat hp" + (m.damage ? " hurt" : buffed && m.health > m.base.health ? " up" : "")}>{m.health}</div>
+    </div>
+  );
+}
+
+function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerActive, powerUsable, hoverProps }) {
   const h = side.hero;
   return (
     <div className="hero-row">
@@ -39,7 +87,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
       </div>
       <div className="weapon-slot">
         {side.weapon && (
-          <div className="weapon" title={side.weapon.name + " — " + plain(side.weapon.text)}>
+          <div className="weapon" data-eid={side.weapon.eid} {...hoverProps(side.weapon)}>
             <Art icon={side.weapon.icon} cls={side.weapon.class_key} className="w-art" />
             <span className="w-name">{side.weapon.name}</span>
             <span className="stat atk" title="Daño">{side.weapon.atk}</span>
@@ -48,7 +96,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
         )}
       </div>
       <div className={"hero " + (targetable ? "targetable " : "") + (active ? "active " : "") + (canAct ? "can-act " : "") + (onClick ? "clickable" : "")}
-        onClick={onClick} title={h.name}>
+        onClick={onClick} data-eid={h.eid}>
         <Art icon={h.icon} cls={h.class_key} className="h-art" />
         <div className="h-name">{side.name}</div>
         <div className="h-class">{h.name}</div>
@@ -62,8 +110,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
         )}
       </div>
       <div className={"power " + (powerUsable ? "usable " : "used ") + (powerActive ? "active" : "")}
-        onClick={mine && powerUsable ? onPower : undefined}
-        title={side.power.name + " — " + plain(side.power.text)}>
+        onClick={mine && powerUsable ? onPower : undefined} data-eid={side.power.eid} {...hoverProps(side.power)}>
         <span className="cost">{side.power.cost}</span>
         <Art icon={side.power.icon} cls={side.power.class_key} className="p-art" />
         <span className="p-name">{side.power.name}</span>
@@ -83,16 +130,45 @@ function useCountdown(view) {
   return left;
 }
 
+function center(r) {
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+function Arrow({ from, to, className }) {
+  if (!from || !to) return null;
+  const midY = Math.min(from.y, to.y) - 60;
+  return (
+    <svg className={"arrow-layer " + (className || "")} width="100%" height="100%">
+      <defs>
+        <marker id={"ah-" + (className || "x")} markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="auto">
+          <path d="M0,0 L5,2.5 L0,5 Z" className="arrow-head" />
+        </marker>
+      </defs>
+      <path className="arrow-line" markerEnd={`url(#ah-${className || "x"})`}
+        d={`M${from.x},${from.y} Q${(from.x + to.x) / 2},${midY} ${to.x},${to.y}`} />
+    </svg>
+  );
+}
+
 export function GameBoard({ gameId, onExit }) {
   const [view, setView] = useState(null);
-  const [sel, setSel] = useState(null); // {kind, eid, targets, choose}
+  const [sel, setSel] = useState(null); // selección de objetivo: {kind, eid, targets, choose, position, from}
   const [chooseFor, setChooseFor] = useState(null);
   const [mull, setMull] = useState([]);
   const [error, setError] = useState(null);
   const [mouse, setMouse] = useState(null);
+  const [drag, setDrag] = useState(null); // carta arrastrada desde la mano
+  const [hover, setHover] = useState(null);
+  const [attackAnim, setAttackAnim] = useState(null);
   const left = useCountdown(view);
   const esRef = useRef(null);
+  const handRef = useRef(null);
+  const fieldRef = useRef(null);
+  const rectsRef = useRef({});
+  const lastAttackSeq = useRef(null);
+  const dragRef = useRef(null);
 
+  // ------------------------------------------------------------- conexión en tiempo real
   useEffect(() => {
     let closed = false;
     api.get(`/api/game/${gameId}/state`).then(setView).catch((e) => setError(e.message));
@@ -147,10 +223,44 @@ export function GameBoard({ gameId, onExit }) {
   }, [sel]);
 
   useEffect(() => {
-    const esc = (e) => e.key === "Escape" && (setSel(null), setChooseFor(null));
+    const esc = (e) => e.key === "Escape" && (setSel(null), setChooseFor(null), setDrag(null), (dragRef.current = null));
     window.addEventListener("keydown", esc);
     return () => window.removeEventListener("keydown", esc);
   }, []);
+
+  // ------------------------------------------------ animación de ataque (para los dos jugadores)
+  useLayoutEffect(() => {
+    if (!view) return;
+    const la = view.last_attack;
+    if (la && lastAttackSeq.current !== null && la.seq !== lastAttackSeq.current) {
+      // usamos las posiciones de ANTES del ataque (el defensor puede haber muerto)
+      const ra = rectsRef.current[la.attacker];
+      const rd = rectsRef.current[la.defender];
+      if (ra && rd) {
+        const a = center(ra);
+        const d = center(rd);
+        setAttackAnim({ from: a, to: d, seq: la.seq });
+        setTimeout(() => setAttackAnim((cur) => (cur && cur.seq === la.seq ? null : cur)), 900);
+        const el = document.querySelector(`[data-eid="${la.attacker}"]`);
+        if (el && el.animate) {
+          const dx = (d.x - a.x) * 0.35;
+          const dy = (d.y - a.y) * 0.35;
+          el.animate(
+            [{ transform: "translate(0,0)" }, { transform: `translate(${dx}px,${dy}px) scale(1.06)` }, { transform: "translate(0,0)" }],
+            { duration: 480, easing: "ease-in-out" },
+          );
+        }
+      }
+    }
+    if (la) lastAttackSeq.current = la.seq;
+    else if (lastAttackSeq.current === null) lastAttackSeq.current = 0;
+    // guardamos dónde está cada entidad para la próxima animación
+    const rects = {};
+    document.querySelectorAll(".board [data-eid]").forEach((el) => {
+      rects[el.getAttribute("data-eid")] = el.getBoundingClientRect();
+    });
+    rectsRef.current = rects;
+  }, [view]);
 
   if (!view) return <div className="loading">Conectando con la partida…{error && <p className="error">{error}</p>}</div>;
 
@@ -169,28 +279,114 @@ export function GameBoard({ gameId, onExit }) {
   const opp = view.opponent;
   const myTurn = view.my_turn && !view.choice && !view.finished;
   const isTarget = (eid) => sel && sel.targets && sel.targets.includes(eid);
+  const dragTargets = drag && drag.arrow ? drag.card.targets || [] : [];
+  const isDragTarget = (eid) => dragTargets.includes(eid);
+
+  // hover: mostrar la carta en pequeño junto al ratón (no mientras arrastras)
+  const hoverProps = (card) => ({
+    onMouseEnter: (e) => !dragRef.current && setHover({ card, x: e.clientX, y: e.clientY }),
+    onMouseMove: (e) => !dragRef.current && setHover({ card, x: e.clientX, y: e.clientY }),
+    onMouseLeave: () => setHover(null),
+  });
+
   const origin = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     setMouse({ x: e.clientX, y: e.clientY });
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    return center(r);
   };
 
   const clickTarget = (eid) => {
     if (!sel || !isTarget(eid)) return false;
-    if (sel.kind === "play") send({ type: "play", eid: sel.eid, target: eid, choose: sel.choose, position: me.field.length });
+    if (sel.kind === "play") send({ type: "play", eid: sel.eid, target: eid, choose: sel.choose, position: sel.position ?? me.field.length });
     else if (sel.kind === "attack") send({ type: "attack", attacker: sel.eid, defender: eid });
     else if (sel.kind === "power") send({ type: "hero_power", target: eid, choose: sel.choose });
     return true;
   };
 
-  const clickHand = (c, e) => {
-    if (!myTurn || !c.playable) return;
-    if (c.choose) return setChooseFor({ ...c, from: origin(e) });
-    if (c.targets) {
+  // ------------------------------------------------------------ arrastrar cartas de la mano
+  const fieldIndexAt = (x) => {
+    const els = fieldRef.current ? [...fieldRef.current.querySelectorAll(":scope > .minion")] : [];
+    let idx = 0;
+    els.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (x > r.left + r.width / 2) idx += 1;
+    });
+    return idx;
+  };
+
+  const outOfHand = (y) => {
+    const r = handRef.current && handRef.current.getBoundingClientRect();
+    return r ? y < r.top - 8 : true;
+  };
+
+  const overField = (x, y) => {
+    const r = fieldRef.current && fieldRef.current.getBoundingClientRect();
+    return r ? y > r.top - 90 && y < r.bottom + 40 : false;
+  };
+
+  const startDrag = (c, e) => {
+    if (!myTurn || e.button !== 0) return;
+    e.preventDefault();
+    setHover(null);
+    const r = e.currentTarget.getBoundingClientRect();
+    const d = { card: c, startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, moved: false, from: center(r) };
+    dragRef.current = d;
+
+    const move = (ev) => {
+      const cur = dragRef.current;
+      if (!cur) return;
+      const moved = cur.moved || Math.hypot(ev.clientX - cur.startX, ev.clientY - cur.startY) > DRAG_THRESHOLD;
+      const out = outOfHand(ev.clientY);
+      const isMinion = cur.card.type === "Esbirro";
+      const next = {
+        ...cur, x: ev.clientX, y: ev.clientY, moved,
+        out,
+        // los hechizos con objetivo se convierten en flecha al salir de la mano
+        arrow: out && !isMinion && !cur.card.choose && Array.isArray(cur.card.targets) && cur.card.targets.length > 0,
+        slot: isMinion && out && overField(ev.clientX, ev.clientY) ? fieldIndexAt(ev.clientX) : null,
+      };
+      dragRef.current = next;
+      setDrag(next);
+    };
+
+    const up = (ev) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      const cur = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (!cur || !cur.moved) {
+        if (cur && !cur.card.playable) setError("No puedes jugar esa carta ahora");
+        return;
+      }
+      if (!outOfHand(ev.clientY)) return; // la devolviste a la mano
+      dropCard(cur, ev);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+
+  const dropCard = (cur, ev) => {
+    const c = cur.card;
+    if (!c.playable) return setError(c.cost > me.mana ? "No tienes maná suficiente" : "No puedes jugar esa carta ahora");
+    const isMinion = c.type === "Esbirro";
+    const position = isMinion ? (cur.slot ?? me.field.length) : undefined;
+    if (c.choose) return setChooseFor({ ...c, from: cur.from, position });
+    if (Array.isArray(c.targets)) {
+      if (isMinion) {
+        // esbirro con Grito de batalla con objetivo: se coloca y luego eliges con flecha
+        if (c.targets.length === 0) return send({ type: "play", eid: c.eid, position });
+        setMouse({ x: ev.clientX, y: ev.clientY });
+        return setSel({ kind: "play", eid: c.eid, targets: c.targets, position, from: { x: ev.clientX, y: ev.clientY } });
+      }
       if (c.targets.length === 0) return setError("No hay objetivos válidos");
-      return setSel({ kind: "play", eid: c.eid, targets: c.targets, from: origin(e) });
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const tgt = el && el.closest("[data-eid]");
+      const eid = tgt ? Number(tgt.getAttribute("data-eid")) : null;
+      if (eid !== null && c.targets.includes(eid)) return send({ type: "play", eid: c.eid, target: eid });
+      return; // soltaste la flecha fuera de un objetivo válido: se cancela
     }
-    send({ type: "play", eid: c.eid, position: me.field.length });
+    send({ type: "play", eid: c.eid, position });
   };
 
   const pickChoose = (o) => {
@@ -199,9 +395,9 @@ export function GameBoard({ gameId, onExit }) {
     if (!o.playable) return setError("Esa opción no se puede jugar ahora");
     if (o.targets) {
       if (o.targets.length === 0) return setError("No hay objetivos válidos");
-      return setSel({ kind: "play", eid: c.eid, targets: o.targets, choose: o.eid, from: c.from });
+      return setSel({ kind: "play", eid: c.eid, targets: o.targets, choose: o.eid, position: c.position, from: c.from });
     }
-    send({ type: "play", eid: c.eid, choose: o.eid, position: me.field.length });
+    send({ type: "play", eid: c.eid, choose: o.eid, position: c.position ?? me.field.length });
   };
 
   const clickMine = (ent, e) => {
@@ -209,6 +405,7 @@ export function GameBoard({ gameId, onExit }) {
     if (!myTurn) return;
     if (sel && sel.eid === ent.eid) return setSel(null);
     if (ent.can_attack && ent.attack_targets && ent.attack_targets.length) {
+      setHover(null);
       setSel({ kind: "attack", eid: ent.eid, targets: ent.attack_targets, from: origin(e) });
     } else if (ent.atk > 0 && !ent.can_attack) {
       setError("Ese personaje no puede atacar ahora");
@@ -222,23 +419,41 @@ export function GameBoard({ gameId, onExit }) {
     send({ type: "hero_power" });
   };
 
+  // campo propio con hueco donde caería el esbirro arrastrado
+  const myField = [...me.field];
+  const slot = drag && drag.slot !== null && drag.slot !== undefined ? drag.slot : null;
+
   return (
-    <div className="board" onClick={(e) => {
+    <div className={"board" + (drag ? " dragging" : "")} onClick={(e) => {
       const c = e.target.classList;
       if (c.contains("board") || c.contains("side") || c.contains("field") || c.contains("hand") || c.contains("midline") || c.contains("hero-row")) setSel(null);
     }}>
       <div className="side opp">
         <div className="hand opp-hand">{opp.hand.map((c) => <CardBack key={c.eid} />)}</div>
-        <Hero side={opp} targetable={isTarget(opp.hero.eid)} onClick={sel ? () => clickTarget(opp.hero.eid) : undefined} />
+        <Hero side={opp} hoverProps={hoverProps} targetable={isTarget(opp.hero.eid) || isDragTarget(opp.hero.eid)}
+          onClick={sel ? () => clickTarget(opp.hero.eid) : undefined} />
         <div className="field">
           {opp.field.map((m) => (
-            <Minion key={m.eid} m={m} targetable={isTarget(m.eid)} onClick={sel ? () => clickTarget(m.eid) : undefined} />
+            <Minion key={m.eid} m={m} hoverProps={hoverProps} targetable={isTarget(m.eid) || isDragTarget(m.eid)}
+              onClick={sel ? () => clickTarget(m.eid) : undefined} />
           ))}
         </div>
       </div>
 
       <div className="midline">
-        <div className="log">{view.log.slice(-4).map((l, i) => <div key={i}>{l}</div>)}</div>
+        <div className="log">
+          {view.log.slice(-5).map((entry, i) => (
+            <div key={i} className="log-entry">
+              {(Array.isArray(entry) ? entry : [{ t: String(entry) }]).map((seg, j) =>
+                seg.card ? (
+                  <span key={j} className="log-card" {...hoverProps(seg.card)}>{seg.card.name}</span>
+                ) : (
+                  <span key={j}>{seg.t}</span>
+                ),
+              )}
+            </div>
+          ))}
+        </div>
         <div className="turn-info">
           {view.mulligan ? "Mulligan" : view.finished ? "Fin de la partida" : myTurn ? "Tu turno" : "Turno del rival"}
           {!view.finished && <span className={"timer" + (left <= 15 ? " low" : "")}>{left}s</span>}
@@ -247,36 +462,41 @@ export function GameBoard({ gameId, onExit }) {
       </div>
 
       <div className="side mine">
-        <div className="field">
-          {me.field.map((m) => (
-            <Minion key={m.eid} m={m} canAct={myTurn && m.can_attack} active={sel && sel.eid === m.eid}
-              targetable={isTarget(m.eid)} onClick={(e) => clickMine(m, e)} />
-          ))}
+        <div className={"field" + (slot !== null ? " drop-active" : "")} ref={fieldRef}>
+          {myField.map((m, i) => [
+            slot === i ? <div key={"slot" + i} className="drop-slot" /> : null,
+            <Minion key={m.eid} m={m} hoverProps={hoverProps} canAct={myTurn && m.can_attack} active={sel && sel.eid === m.eid}
+              targetable={isTarget(m.eid) || isDragTarget(m.eid)} onClick={(e) => clickMine(m, e)} />,
+          ])}
+          {slot === myField.length && <div className="drop-slot" />}
         </div>
-        <Hero side={me} mine targetable={isTarget(me.hero.eid)} active={sel && sel.eid === me.hero.eid}
+        <Hero side={me} mine hoverProps={hoverProps} targetable={isTarget(me.hero.eid) || isDragTarget(me.hero.eid)}
+          active={sel && sel.eid === me.hero.eid}
           canAct={myTurn && me.hero.can_attack} onClick={(e) => clickMine(me.hero, e)}
           onPower={clickPower} powerUsable={myTurn && me.power.usable} powerActive={sel && sel.kind === "power"} />
-        <div className="hand">
+        <div className="hand" ref={handRef}>
           {me.hand.map((c) => (
-            <Card key={c.eid} card={c} small onClick={(e) => clickHand(c, e)} dim={myTurn && !c.playable}
-              selected={sel && sel.eid === c.eid} />
+            <div key={c.eid} className={"hand-slot" + (drag && drag.card.eid === c.eid && drag.moved ? " lifted" : "")}
+              onPointerDown={(e) => startDrag(c, e)} {...hoverProps(c)}>
+              <Card card={c} small dim={myTurn && !c.playable} selected={sel && sel.eid === c.eid} />
+            </div>
           ))}
         </div>
       </div>
 
-      {sel && <div className="sel-hint">Elige un objetivo resaltado (Esc o clic fuera para cancelar)</div>}
-      {sel && sel.from && mouse && (
-        <svg className="arrow-layer" width="100%" height="100%">
-          <defs>
-            <marker id="arrowhead" markerWidth="5" markerHeight="5" refX="2.5" refY="2.5" orient="auto">
-              <path d="M0,0 L5,2.5 L0,5 Z" className="arrow-head" />
-            </marker>
-          </defs>
-          <path className="arrow-line" markerEnd="url(#arrowhead)"
-            d={`M${sel.from.x},${sel.from.y} Q${(sel.from.x + mouse.x) / 2},${Math.min(sel.from.y, mouse.y) - 60} ${mouse.x},${mouse.y}`} />
-        </svg>
+      {/* carta que sigue al ratón mientras la arrastras */}
+      {drag && drag.moved && !drag.arrow && (
+        <div className="drag-ghost" style={{ left: drag.x + "px", top: drag.y + "px" }}>
+          <Card card={drag.card} small />
+        </div>
       )}
+      {drag && drag.arrow && <Arrow from={drag.from} to={{ x: drag.x, y: drag.y }} className="aim" />}
+      {sel && sel.from && mouse && <Arrow from={sel.from} to={mouse} className="aim" />}
+      {attackAnim && <Arrow from={attackAnim.from} to={attackAnim.to} className="attack" />}
+
+      {sel && <div className="sel-hint">Elige un objetivo resaltado (Esc o clic fuera para cancelar)</div>}
       {error && <div className="toast error" onClick={() => setError(null)}>{error}</div>}
+      {!drag && !sel && <HoverPreview hover={hover} />}
 
       {chooseFor && (
         <div className="modal">
