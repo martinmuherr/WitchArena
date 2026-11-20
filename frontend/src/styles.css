@@ -568,3 +568,55 @@ body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-i
 .hp-tip .hp-power-art .art-fallback { width: 100%; height: 100%; }
 .hero > .ice, .minion > .ice { position: absolute; inset: -6px; }
 .hero > .stat, .minion > .stat { z-index: 4; }
+
+/* ===================== Panel lateral: registro grande con scroll y chat ===================== */
+.board { padding-left: 292px; }
+.board-credit { left: 292px; }
+.side-panel { position: fixed; left: 10px; top: 10px; bottom: 10px; width: 268px; z-index: 25; display: flex; flex-direction: column; gap: 6px;
+  background: #140e08e6; border: 2px solid #6b5129; border-radius: 14px; padding: 10px; box-shadow: 0 10px 30px #000a; }
+.sp-title { font-family: var(--serif); color: var(--amber2); font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.side-panel .log { flex: 3 1 0; min-height: 120px; overflow-y: auto; min-width: 0; font-size: 12.5px; line-height: 1.4; color: #d7cbb3;
+  background: #0007; border-radius: 8px; padding: 6px 8px; }
+.side-panel .log-entry { white-space: normal; max-width: none; padding: 3px 0; border-bottom: 1px solid #ffffff10; }
+.side-panel .log-entry:last-child { color: #fff; }
+.chat { flex: 2 1 0; min-height: 90px; overflow-y: auto; background: #0007; border-radius: 8px; padding: 6px 8px; font-size: 13px; }
+.chat-msg { padding: 3px 0; word-wrap: break-word; color: #e9e1cf; }
+.chat-msg b { color: #ff9e8a; font-weight: 700; }
+.chat-msg.mine b { color: #8fc3ff; }
+.chat-empty { color: var(--muted); font-size: 12px; text-align: center; padding-top: 8px; }
+.chat-form { display: flex; gap: 6px; }
+.chat-form input { flex: 1; min-width: 0; padding: 7px 9px; border-radius: 8px; border: 1px solid #6b5129; background: #0009; color: #fff; font-size: 13px; }
+.chat-form button { padding: 6px 10px; font-size: 13px; }
+.chat-err { color: #ff8a73; font-size: 12px; }
+.unread { background: #e0483a; color: #fff; border-radius: 10px; font-family: var(--sans, sans-serif); font-size: 11px; padding: 1px 7px; }
+.mid-spacer { min-width: 150px; }
+.side-panel .log::-webkit-scrollbar, .chat::-webkit-scrollbar { width: 8px; }
+.side-panel .log::-webkit-scrollbar-thumb, .chat::-webkit-scrollbar-thumb { background: #6b5129; border-radius: 4px; }
+@media (max-width: 1150px) {
+  .board { padding-left: 222px; } .board-credit { left: 222px; }
+  .side-panel { width: 200px; }
+}
+
+/* ===================== Palabras clave al pasar el ratón ===================== */
+.hover-kws { margin-top: 6px; display: flex; flex-direction: column; gap: 5px; }
+.hover-kws .kw { background: #0008; border-left: 3px solid var(--amber2); border-radius: 6px; padding: 4px 7px; font-size: 12px; line-height: 1.3; }
+.hover-kws .kw b { display: block; color: var(--amber2); font-size: 12.5px; }
+
+/* ===================== Elusivo: arte amarillento ===================== */
+.minion.elusive .m-art, .minion.elusive .m-art.art-img img { filter: sepia(.85) saturate(2.2) hue-rotate(5deg) brightness(1.08); }
+.minion.elusive { box-shadow: 0 0 0 2px #e9cf5a, 0 0 14px 3px #f5d84a88; }
+
+/* ===================== Efectos que se activan solos ===================== */
+.mark-trigger { border-radius: 50%; animation: trigger-ring 1s ease-out forwards;
+  background: radial-gradient(circle, #fff3c400 40%, #ffd36b99 62%, #ffd36b00 72%); }
+@keyframes trigger-ring { 0% { transform: scale(.7); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
+.projectile.k-freeze { background: radial-gradient(circle, #ffffff 0%, #8fd8ff 45%, #8fd8ff00 72%); box-shadow: 0 0 22px 8px #7cc8ff88; }
+.impact.k-freeze { background: radial-gradient(circle, #e6f7ff 0%, #7cc8ff99 40%, #7cc8ff00 70%); }
+
+/* ===================== Maná siempre visible, por encima de la mesa ===================== */
+.hero-row .mana { order: 10; position: relative; z-index: 6; min-width: 0; align-items: flex-start; text-align: left; margin-left: 10px; }
+.hero-row .mana-n { font-size: 22px; background: #0b1a2ef2; border: 2px solid #6ea8ec; box-shadow: 0 0 10px #000, 0 0 8px #3b82d699;
+  padding: 2px 12px; border-radius: 16px; }
+.hero-row .mana-n::before { content: "◆ "; color: #6ea8ec; font-size: 16px; }
+.hero-row .overload { background: #2a1606ee; border-radius: 10px; padding: 1px 8px; }
+.hero-row::before { content: ""; order: -1; width: 150px; flex: 0 0 150px; }

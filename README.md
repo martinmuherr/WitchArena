@@ -45,6 +45,9 @@ el Reptador del pasillo es 5/5, Parches tiene Carga y el poder de Raza el Encade
 - 🃏 **Cada carta jugada se ve en grande** unos instantes (hechizos, esbirros y armas); los secretos que saltan se anuncian con un destello morado.
 - 👑 **Cartas de héroe** (Hagatha, caballeros de la muerte, Lord Jaraxxus…) con su propia animación: el héroe antiguo se aparta y aparece el nuevo.
 - ❄️ **Congelado** se ve como rombos de hielo alrededor del marco del esbirro o del héroe.
+- ⚡ **Efectos que se activan solos** (fin de turno, Últimos alientos, Malabarista de cuchillos, hechizos lanzados por esbirros…): el esbirro brilla y lanza su efecto, y todo queda en el registro.
+- 📜 **Registro completo** en un panel lateral con scroll, y **chat** entre los dos jugadores.
+- 💡 **Palabras clave explicadas** al pasar el ratón, y los esbirros que no pueden ser objetivo de hechizos se ven amarillentos.
 - 📚 **Mazo visible** junto a cada héroe y animación de cada robo; animaciones al morir (con aviso de Último aliento) y al aparecer esbirros.
 
 | Draft | Atacando |

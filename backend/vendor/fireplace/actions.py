@@ -1614,6 +1614,8 @@ class SetTags(TargetedAction):
         else:
             for tag in tags:
                 target.tags[tag] = True
+        # HS_WitchArena: avisa a los observadores (para animar Congelar)
+        source.game.manager.targeted_action(self, source, target, tags)
         self.broadcast(source, EventListener.AFTER, target)
 
 

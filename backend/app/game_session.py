@@ -13,7 +13,7 @@ from . import rooms
 from fireplace.exceptions import GameOver, InvalidAction
 from fireplace.game import Game
 from fireplace.player import Player
-from hearthstone.enums import CardType, PlayState, State, Zone
+from hearthstone.enums import CardType, GameTag, PlayState, State, Zone
 
 logging.getLogger("fireplace").setLevel(logging.WARNING)
 
@@ -42,6 +42,38 @@ TYPE_KIND = {CardType.MINION: "minion", CardType.SPELL: "spell", CardType.WEAPON
              CardType.HERO: "hero"}
 
 
+class _Tracer:
+    """Observador del motor: anota quién hace qué (daño, curación, invocaciones, hechizos
+    lanzados por esbirros...) para poder animarlo y escribirlo en el registro."""
+
+    WATCH = {"Damage", "Heal", "Destroy", "Summon", "CastSpell", "Buff", "SetTags", "Deathrattle"}
+
+    def game_action(self, action, source, *args):
+        if type(action).__name__ == "Death" and args:
+            self.entries.append(("Death", None, args[0], ()))
+
+    def __init__(self):
+        self.entries = []
+
+    def targeted_action(self, action, source, target, *args):
+        name = type(action).__name__
+        if name not in self.WATCH:
+            return
+        if name == "SetTags":
+            tags = args[0] if args else ()
+            if GameTag.FROZEN not in (tags if not isinstance(tags, dict) else tags.keys()):
+                return
+            name = "Freeze"
+        self.entries.append((name, source, target, args))
+
+    def __getattr__(self, name):  # el resto de avisos del motor no nos interesan
+        return lambda *a, **k: None
+
+
+MAX_CHAT = 200
+LOG_KEEP = 120
+
+
 class GameSession:
     def __init__(self, game_id, seats, room=None):
         """seats: lista de 2 dicts {user_id, username, hero, deck}"""
@@ -64,6 +96,11 @@ class GameSession:
         self.finished = False
         self.finish_reason = None
         self.deadline = time.time() + MULLIGAN_SECONDS
+        self.chat = []           # mensajes entre los dos jugadores
+        self._chat_seq = 0
+        self._last_said = {}
+        self._tracer = _Tracer()
+        self.game.manager.register(self._tracer)
         try:
             self.game.start()
         except GameOver:
@@ -77,7 +114,7 @@ class GameSession:
             if isinstance(text, str):
                 text = [{"t": text}]
             self.log.append(text)
-            self.log = self.log[-30:]
+            self.log = self.log[-LOG_KEEP:]
 
     @staticmethod
     def _ref(entity):
@@ -114,6 +151,7 @@ class GameSession:
     def _run(self, fn):
         if self.finished:
             raise ActionError("La partida ha terminado")
+        self._tracer.entries = []
         try:
             fn()
         except GameOver:
@@ -153,7 +191,8 @@ class GameSession:
         board = self._board()
         self._run(lambda: p.choice.choose(card))
         self._bump("%s elige una carta" % p.name)
-        self._board_events(board)
+        animated = self._trace_events()
+        self._board_events(board, skip_hits=animated)
 
     def play(self, user_id, entity_id, target=None, choose=None, position=None):
         p = self.player_of(user_id)
@@ -187,7 +226,8 @@ class GameSession:
         self._run(lambda: card.play(target=tgt, index=index, choose=ch))
         self._record_effect(before, source, cid, tgt)
         self._bump(entry)
-        self._board_events(board, played=card.entity_id)
+        animated = self._trace_events(primary={card.entity_id, p.entity_id, p.hero.entity_id})
+        self._board_events(board, played=card.entity_id, skip_hits=animated)
 
     def attack(self, user_id, attacker_id, defender_id):
         p = self.player_of(user_id)
@@ -205,7 +245,8 @@ class GameSession:
         before = self._snapshot()
         self._run(lambda: att.attack(dfn))
         self._bump(entry)
-        self._board_events(board, skip_hits={att.entity_id, dfn.entity_id}, before=before)
+        animated = self._trace_events(combat={att.entity_id, dfn.entity_id})
+        self._board_events(board, skip_hits={att.entity_id, dfn.entity_id} | animated, before=before)
 
     def hero_power(self, user_id, target=None, choose=None):
         p = self.player_of(user_id)
@@ -227,7 +268,8 @@ class GameSession:
         self._run(lambda: power.use(target=tgt, choose=ch))
         self._record_effect(before, power.entity_id, power.id, tgt, is_power=True)
         self._bump(entry)
-        self._board_events(board)
+        animated = self._trace_events(primary={power.entity_id, p.entity_id, p.hero.entity_id})
+        self._board_events(board, skip_hits=animated)
 
     # ------------------------------------------------------------ efectos visuales
     def _snapshot(self):
@@ -331,7 +373,6 @@ class GameSession:
                              "deathrattle": dr})
                 if dr:
                     dying_with_dr = dying_with_dr or e
-                    self.log.append([{"t": "Último aliento: "}, {"card": v}])
             # invocaciones que no son la carta jugada
             before_ids = [e for e, _ in b["field"]]
             for e, cid in a["field"]:
@@ -353,7 +394,141 @@ class GameSession:
                     hits.append({"eid": eid, "kind": "heal", "amount": cur[0] - hp})
             if hits:
                 self._event({"type": "hits", "source": dying_with_dr, "hits": hits[:10]})
-        self.log = self.log[-30:]
+        self.log = self.log[-LOG_KEEP:]
+
+    # --------------------------------------------- efectos encadenados (registro y animación)
+    @staticmethod
+    def _is_card(e):
+        return e is not None and getattr(e, "id", None) and hasattr(e, "zone")
+
+    def _trace_events(self, primary=None, combat=None):
+        """Convierte lo que anotó el motor en líneas del registro y animaciones.
+        primary: entidades que hizo el jugador (su carta/poder): se registran pero ya se animan
+        con last_effect. combat: atacante y defensor (el daño del combate ya se ve)."""
+        primary = primary or set()
+        combat = combat or set()
+        entries, self._tracer.entries = self._tracer.entries, []
+        groups = []  # [(kind, source, amount_or_card, [targets])]
+        for name, src, tgt, args in entries:
+            if name in ("Death", "Deathrattle"):
+                if self._is_card(tgt) and tgt.type == CardType.MINION:
+                    groups.append([(name, getattr(tgt, "entity_id", None), None), None, tgt, []])
+                continue
+            if src is None:
+                continue
+            # el daño que hace un jugador (p. ej. curación invertida) se atribuye a su héroe
+            if not self._is_card(src) and getattr(src, "hero", None) is not None:
+                src = src.hero
+            if not self._is_card(src):
+                continue
+            if name == "Damage":
+                amount = args[0] if args else 0
+                if not amount:
+                    continue
+                if src.entity_id in combat and getattr(tgt, "entity_id", None) in combat:
+                    continue
+                key = ("damage", src.entity_id, amount)
+            elif name == "Heal":
+                amount = args[0] if args else 0
+                if not amount:
+                    continue
+                key = ("heal", src.entity_id, amount)
+            elif name == "Destroy":
+                key = ("destroy", src.entity_id, None)
+            elif name == "Summon":
+                card = args[0] if args else None
+                if not self._is_card(card) or getattr(card, "zone", None) != Zone.PLAY:
+                    continue
+                if src.entity_id in primary and card.entity_id in primary:
+                    continue
+                key = ("summon", src.entity_id, None)
+                tgt = card
+            elif name == "CastSpell":
+                spell = tgt
+                tgt = args[0] if args else None
+                if not self._is_card(spell):
+                    continue
+                key = ("cast", src.entity_id, spell.id)
+                groups.append([key, src, spell, [tgt] if self._is_card(tgt) else []])
+                continue
+            elif name in ("Buff", "Freeze"):
+                if not self._is_card(tgt) or tgt.zone != Zone.PLAY or tgt.type not in (
+                        CardType.MINION, CardType.HERO):
+                    continue
+                if src is tgt or src.entity_id in primary:
+                    continue
+                key = ("freeze" if name == "Freeze" else "buff", src.entity_id, None)
+            else:
+                continue
+            if not self._is_card(tgt):
+                continue
+            if groups and groups[-1][0] == key:
+                if all(t is not tgt for t in groups[-1][3]):
+                    groups[-1][3].append(tgt)
+            else:
+                groups.append([key, src, None, [tgt]])
+
+        animated = set()
+        verbs = {"damage": " inflige %s p. de daño a ", "heal": " restaura %s p. de salud a ",
+                 "destroy": " destruye a ", "summon": " invoca a ", "buff": " mejora a ",
+                 "freeze": " congela a "}
+        for (kind, src_eid, amount), src, extra, targets in groups[:24]:
+            if kind == "Death":
+                self.log.append([self._ref(extra), {"t": " muere"}])
+                continue
+            if kind == "Deathrattle":
+                self.log.append([{"t": "Último aliento: "}, self._ref(extra)])
+                continue
+            src_ref = self._ref(src)
+            if kind == "cast":
+                v = C.card_view(extra.id)
+                line = [src_ref, {"t": " lanza "}, {"card": v}]
+                if targets:
+                    line += [{"t": " sobre "}, self._ref(targets[0])]
+                self.log.append(line)
+                self._event({"type": "cast", "player": self.players.index(src.controller),
+                             "card": v, "kind": "spell", "secret": False, "eid": extra.entity_id,
+                             "by": C.card_view(src.id)["name"], "source": src_eid})
+                continue
+            line = [src_ref, {"t": verbs[kind] % amount if "%s" in verbs[kind] else verbs[kind]}]
+            for i, t in enumerate(targets[:8]):
+                if i:
+                    line.append({"t": ", "})
+                line.append(self._ref(t))
+            self.log.append(line)
+            # animación: el origen brilla y lanza un efecto a cada objetivo
+            if src_eid in primary or kind == "summon":
+                continue
+            hits = []
+            for t in targets[:10]:
+                hk = {"damage": "damage", "heal": "heal", "destroy": "damage",
+                      "buff": "buff", "freeze": "freeze"}[kind]
+                hits.append({"eid": t.entity_id, "kind": hk,
+                             "amount": amount if kind in ("damage", "heal") else None})
+                if kind in ("damage", "heal"):
+                    animated.add(t.entity_id)
+            sv = C.card_view(src.id)
+            self._event({"type": "trigger", "source": src_eid, "hits": hits,
+                         "icon": sv.get("icon"), "class_key": sv.get("class_key"),
+                         "card": sv, "player": self.players.index(src.controller)})
+        self.log = self.log[-LOG_KEEP:]
+        return animated
+
+    # ------------------------------------------------------------------ chat
+    def say(self, user_id, text):
+        p = self.player_of(user_id)
+        text = " ".join(str(text or "").split())[:MAX_CHAT]
+        if not text:
+            raise ActionError("Mensaje vacío")
+        now = time.time()
+        if now - self._last_said.get(user_id, 0) < 0.8:
+            raise ActionError("Más despacio")
+        self._last_said[user_id] = now
+        self._chat_seq += 1
+        self.chat.append({"seq": self._chat_seq, "player": self.players.index(p), "name": p.name,
+                          "text": text, "t": now})
+        self.chat = self.chat[-60:]
+        self.version += 1
 
     def _events_for(self, viewer_idx):
         out = []
@@ -379,7 +554,8 @@ class GameSession:
             self._run(self.game.end_turn)
         self.deadline = time.time() + TURN_SECONDS
         self._bump("%s termina su turno%s" % (p.name, " (tiempo agotado)" if forced else ""))
-        self._board_events(board, before=before)
+        animated = self._trace_events()
+        self._board_events(board, before=before, skip_hits=animated)
 
     def concede(self, user_id):
         p = self.player_of(user_id)
@@ -430,7 +606,8 @@ class GameSession:
         if c.type == CardType.MINION and c.zone == Zone.PLAY:
             v["flags"] = [f for f in ("taunt", "divine_shield", "stealthed", "frozen", "windfury",
                                        "poisonous", "lifesteal", "rush", "charge", "silenced",
-                                       "dormant", "cant_be_targeted_by_spells")
+                                       "dormant", "cant_be_targeted_by_spells",
+                                       "cant_be_targeted_by_hero_powers", "immune")
                           if getattr(c, f, False)]
         if c.type == CardType.HERO and c.zone == Zone.PLAY:
             v["flags"] = [f for f in ("frozen", "immune", "stealthed") if getattr(c, f, False)]
@@ -520,7 +697,8 @@ class GameSession:
             "choice": choice,
             "finished": self.finished,
             "winner": winner,
-            "log": self.log[-12:],
+            "log": self.log[-LOG_KEEP:],
+            "chat": [dict(m, mine=m["player"] == self.players.index(me)) for m in self.chat],
             "last_attack": self.last_attack,
             "last_effect": self.last_effect,
             "events": self._events_for(self.players.index(me))[-25:],

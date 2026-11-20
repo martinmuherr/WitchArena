@@ -458,6 +458,11 @@ async def game_action(request, user):
             s.end_turn(uid)
         elif kind == "concede":
             s.concede(uid)
+        elif kind == "chat":
+            text = data.get("text")
+            if not isinstance(text, str):
+                raise ActionError("Mensaje no válido")
+            s.say(uid, text)
         else:
             raise ActionError("Acción desconocida")
         await _after_change(gid)

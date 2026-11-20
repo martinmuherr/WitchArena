@@ -6,7 +6,52 @@ const FLAG_ES = {
   taunt: "Provocar", divine_shield: "Escudo divino", stealthed: "Sigilo", frozen: "Congelado",
   windfury: "Viento furioso", poisonous: "Veneno", lifesteal: "Robo de vida", rush: "Embestir",
   charge: "Cargar", silenced: "Silenciado", dormant: "Latente", cant_be_targeted_by_spells: "Elusivo",
+  cant_be_targeted_by_hero_powers: "Elusivo", immune: "Inmune",
 };
+
+// Recordatorio de las palabras clave (como en el juego al pasar el ratón)
+const KEYWORDS = [
+  { re: /provoca/, name: "Provocar", text: "Los enemigos deben atacar a este esbirro." },
+  { re: /escudo divino/, name: "Escudo divino", text: "La primera vez que este esbirro recibe daño, se ignora." },
+  { re: /(?<![a-záéíóúñ])carg|carrrr/, name: "Cargar", text: "Puede atacar inmediatamente." },
+  { re: /embesti/, name: "Embestir", text: "Puede atacar a esbirros inmediatamente." },
+  { re: /viento furioso/, name: "Viento furioso", text: "Puede atacar dos veces por turno." },
+  { re: /sigilo/, name: "Sigilo", text: "No puede ser atacado ni ser objetivo hasta que ataque." },
+  { re: /veneno/, name: "Veneno", text: "Destruye a cualquier esbirro al que inflija daño." },
+  { re: /robo de vida/, name: "Robo de vida", text: "El daño que inflige también cura a tu héroe." },
+  { re: /grito de batalla|gritos de batalla/, name: "Grito de batalla", text: "Hace algo cuando lo juegas desde tu mano." },
+  { re: /último aliento/, name: "Último aliento", text: "Hace algo cuando muere." },
+  { re: /descubr/, name: "Descubrir", text: "Elige una de tres cartas para añadirla a tu mano." },
+  { re: /sobrecarga/, name: "Sobrecarga", text: "Tendrás menos maná el próximo turno." },
+  { re: /combo/, name: "Combo", text: "Bonificación si ya has jugado otra carta este turno." },
+  { re: /secreto/, name: "Secreto", text: "Oculto hasta que se cumple su condición en el turno del rival." },
+  { re: /silencia/, name: "Silenciar", text: "Elimina el texto de carta y las mejoras de un esbirro." },
+  { re: /congela/, name: "Congelar", text: "Los personajes congelados pierden su próximo ataque." },
+  { re: /daño con hechizos/, name: "Daño con hechizos", text: "Tus hechizos infligen más daño." },
+  { re: /elige una|elige dos/, name: "Elige una opción", text: "Elige entre dos efectos al jugar la carta." },
+  { re: /inspira/, name: "Inspirar", text: "Hace algo cada vez que usas tu poder de héroe." },
+  { re: /adapta/, name: "Adaptar", text: "Elige una de tres mejoras." },
+  { re: /recluta/, name: "Reclutar", text: "Invoca a un esbirro de tu mazo." },
+  { re: /gólem de jade/, name: "Gólem de jade", text: "Cada gólem de jade que invocas es +1/+1 más grande." },
+  { re: /(?<![a-záéíóúñ])eco(?![a-záéíóúñ])/, name: "Eco", text: "Puedes volver a jugarla este turno." },
+  { re: /inmune/, name: "Inmune", text: "No recibe daño." },
+  { re: /inicio de partida/, name: "Inicio de partida", text: "Se activa al empezar la partida." },
+  { re: /misión/, name: "Misión", text: "Empieza en tu mano. Cúmplela para conseguir la recompensa." },
+  { re: /enfurec/, name: "Enfurecer", text: "Se activa mientras este esbirro está dañado." },
+  { re: /pieza de repuesto/, name: "Pieza de repuesto", text: "Hechizo de 1 maná con un efecto pequeño." },
+];
+
+function keywordsOf(c) {
+  const bold = [...String(c.text || "").matchAll(/<b>(.*?)<\/b>/g)].map((m) => m[1]).join(" | ").toLowerCase().replace(/_/g, " ");
+  const flagText = (c.flags || []).map((f) => (FLAG_ES[f] || "").toLowerCase()).join(" | ");
+  const hay = bold + " | " + flagText;
+  const out = KEYWORDS.filter((k) => k.re.test(hay));
+  const plain = String(c.text || "").toLowerCase();
+  if ((c.flags || []).some((f) => f.startsWith("cant_be_targeted")) || plain.includes("no puede ser objetivo de hechizos")) {
+    out.push({ name: "Elusivo", text: "No puede ser objetivo de hechizos ni de poderes de héroe." });
+  }
+  return out;
+}
 
 const DRAG_THRESHOLD = 6; // px antes de considerar que empiezas a arrastrar
 
@@ -34,10 +79,11 @@ export function HoverPreview({ hover }) {
   const base = { ...c, ...(c.base || {}) };
   const buffs = c.buffs || [];
   const flags = c.flags || [];
+  const kws = keywordsOf(c);
   return (
     <div className="hover-preview" ref={ref} style={{ left: pos.left + "px", top: pos.top + "px" }}>
       <Card card={base} />
-      {(buffs.length > 0 || flags.length > 0) && (
+      {(buffs.length > 0 || flags.length > 0 || kws.length > 0) && (
         <div className="hover-buffs">
           {buffs.length > 0 && <h4>Mejoras</h4>}
           {buffs.map((b, i) => (
@@ -47,7 +93,18 @@ export function HoverPreview({ hover }) {
               {b.source && b.source !== b.name && <div className="buff-src">de {b.source}</div>}
             </div>
           ))}
-          {flags.length > 0 && <div className="hover-flags">{flags.map((f) => FLAG_ES[f] || f).join(" · ")}</div>}
+          {(() => {
+            // estados que no tienen ya su recordatorio debajo (Congelado, Silenciado...)
+            const rest = flags.map((f) => FLAG_ES[f] || f).filter((n) => !kws.some((k) => k.name === n));
+            return rest.length > 0 && <div className="hover-flags">{[...new Set(rest)].join(" · ")}</div>;
+          })()}
+          {kws.length > 0 && (
+            <div className="hover-kws">
+              {kws.map((k) => (
+                <div key={k.name} className="kw"><b>{k.name}</b><span>{k.text}</span></div>
+              ))}
+            </div>
+          )}
           {c.atk !== undefined && c.base && (c.atk !== c.base.atk || c.health !== c.base.health) && c.type === "Esbirro" && (
             <div className="hover-now">Ahora: {c.atk}/{c.health}</div>
           )}
@@ -94,7 +151,8 @@ export function Frozen() {
 
 function Minion({ m, onClick, targetable, active, canAct, hoverProps }) {
   const flags = m.flags || [];
-  const cls = ["minion", ...flags.map((f) => "f-" + f), targetable ? "targetable" : "",
+  const cls = ["minion", ...flags.map((f) => "f-" + f),
+    flags.some((f) => f.startsWith("cant_be_targeted")) ? "elusive" : "", targetable ? "targetable" : "",
     active ? "active" : "", canAct ? "can-act" : "", onClick ? "clickable" : ""].join(" ");
   const buffed = m.base && m.base.atk !== undefined;
   return (
@@ -251,7 +309,7 @@ function CastOverlay({ ev }) {
   const isHero = ev.type === "hero_change";
   const hidden = ev.card && ev.card.hidden;
   const kind = isHero ? "hero" : ev.kind || "spell";
-  const who = ev.mine ? "Juegas" : "Tu rival juega";
+  const who = ev.by ? `${ev.by} lanza` : ev.mine ? "Juegas" : "Tu rival juega";
   return (
     <div className={"cast-overlay " + (ev.mine ? "mine" : "opp") + (isSecretReveal ? " secret-reveal" : "") + " k-" + kind}
       style={{ "--ov-ms": overlayMs(ev) + "ms" }}>
@@ -289,6 +347,85 @@ function Arrow({ from, to, className }) {
       <path className="arrow-line" markerEnd={`url(#ah-${className || "x"})`}
         d={`M${from.x},${from.y} Q${(from.x + to.x) / 2},${midY} ${to.x},${to.y}`} />
     </svg>
+  );
+}
+
+
+// Panel lateral: registro completo (con scroll) y chat entre los dos jugadores
+function SidePanel({ view, hoverProps, gameId, onView }) {
+  const logRef = useRef(null);
+  const chatRef = useRef(null);
+  const stickLog = useRef(true);
+  const stickChat = useRef(true);
+  const [text, setText] = useState("");
+  const [err, setErr] = useState(null);
+  const chat = view.chat || [];
+  const lastSeen = useRef(null);
+  const [unread, setUnread] = useState(0);
+  useLayoutEffect(() => {
+    const el = logRef.current;
+    if (el && stickLog.current) el.scrollTop = el.scrollHeight;
+  }, [view.log.length, view.version]);
+  useLayoutEffect(() => {
+    const el = chatRef.current;
+    if (el && stickChat.current) el.scrollTop = el.scrollHeight;
+    const last = chat.length ? chat[chat.length - 1].seq : 0;
+    if (lastSeen.current === null) lastSeen.current = last;
+    else if (last > lastSeen.current) {
+      const fromOpp = chat.filter((m) => m.seq > lastSeen.current && !m.mine).length;
+      if (fromOpp) setUnread((u) => u + fromOpp);
+      lastSeen.current = last;
+    }
+  }, [chat.length]);
+  const onScroll = (ref, stick) => () => {
+    const el = ref.current;
+    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+  };
+  const sendChat = async (e) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    setErr(null);
+    try {
+      onView(await api.post(`/api/game/${gameId}/action`, { type: "chat", text: t }));
+      setText("");
+      stickChat.current = true;
+    } catch (e2) {
+      setErr(e2.message);
+    }
+  };
+  return (
+    <aside className="side-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="sp-title">Registro</div>
+      <div className="log" ref={logRef} onScroll={onScroll(logRef, stickLog)}>
+        {view.log.map((entry, i) => (
+          <div key={i} className="log-entry">
+            {(Array.isArray(entry) ? entry : [{ t: String(entry) }]).map((seg, j) =>
+              seg.card ? (
+                <span key={j} className="log-card" {...hoverProps(seg.card)}>{seg.card.name}</span>
+              ) : (
+                <span key={j}>{seg.t}</span>
+              ),
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="sp-title">Chat {unread > 0 && <span className="unread">{unread}</span>}</div>
+      <div className="chat" ref={chatRef} onScroll={onScroll(chatRef, stickChat)} onMouseEnter={() => setUnread(0)}>
+        {chat.length === 0 && <div className="chat-empty">Saluda a tu rival 👋</div>}
+        {chat.map((m) => (
+          <div key={m.seq} className={"chat-msg" + (m.mine ? " mine" : "")}>
+            <b>{m.name}:</b> <span>{m.text}</span>
+          </div>
+        ))}
+      </div>
+      <form className="chat-form" onSubmit={sendChat}>
+        <input value={text} maxLength={200} placeholder="Escribe un mensaje…" onChange={(e) => setText(e.target.value)}
+          onFocus={() => setUnread(0)} />
+        <button type="submit" disabled={!text.trim()}>Enviar</button>
+      </form>
+      {err && <div className="chat-err">{err}</div>}
+    </aside>
   );
 }
 
@@ -493,6 +630,34 @@ export function GameBoard({ gameId, onExit }) {
         } else if (ev.type === "summon") {
           const r = rectOf(`.board [data-eid="${ev.eid}"]`);
           if (r) newMarks.push({ id: "m" + ev.seq, kind: "summon", rect: r });
+        } else if (ev.type === "trigger") {
+          // un esbirro (o arma, héroe...) se activa solo: brilla y lanza su efecto
+          const srcEl = document.querySelector(`.board [data-eid="${ev.source}"]`);
+          const rs = (srcEl && srcEl.getBoundingClientRect()) || rectsRef.current[ev.source];
+          const delay = 250 + idx * 420;
+          if (rs) {
+            setTimeout(() => {
+              if (srcEl && srcEl.animate) {
+                srcEl.animate(
+                  [{ transform: "scale(1)", filter: "brightness(1)" },
+                    { transform: "scale(1.12)", filter: "brightness(1.7) drop-shadow(0 0 14px #ffd36b)", offset: 0.4 },
+                    { transform: "scale(1)", filter: "brightness(1)" }],
+                  { duration: 650, easing: "ease-out" },
+                );
+              }
+              setMarks((cur) => [...cur, { id: "t" + ev.seq, kind: "trigger", rect: rs }]);
+              setTimeout(() => setMarks((cur) => cur.filter((x) => x.id !== "t" + ev.seq)), 1000);
+            }, delay);
+          }
+          const list = [];
+          ev.hits.forEach((h, i) => {
+            const rt = (document.querySelector(`.board [data-eid="${h.eid}"]`) || {}).getBoundingClientRect?.() || rectsRef.current[h.eid];
+            if (!rt) return;
+            const to = center(rt);
+            list.push({ id: "t" + ev.seq + "-" + i, from: rs ? center(rs) : to, to, kind: h.kind, noFly: !rs || h.eid === ev.source,
+              amount: h.amount, icon: ev.icon, cls: ev.class_key, delay: delay + 350 });
+          });
+          if (list.length) setEffects((cur) => [...cur, ...list]);
         } else if (ev.type === "hits") {
           const src = ev.source != null ? rectsRef.current[ev.source] : null;
           const list = [];
@@ -704,20 +869,10 @@ export function GameBoard({ gameId, onExit }) {
         </div>
       </div>
 
+      <SidePanel view={view} hoverProps={hoverProps} gameId={gameId} onView={setView} />
+
       <div className="midline">
-        <div className="log">
-          {view.log.slice(-5).map((entry, i) => (
-            <div key={i} className="log-entry">
-              {(Array.isArray(entry) ? entry : [{ t: String(entry) }]).map((seg, j) =>
-                seg.card ? (
-                  <span key={j} className="log-card" {...hoverProps(seg.card)}>{seg.card.name}</span>
-                ) : (
-                  <span key={j}>{seg.t}</span>
-                ),
-              )}
-            </div>
-          ))}
-        </div>
+        <div className="mid-spacer" />
         <div className="turn-info">
           {view.mulligan ? "Mulligan" : view.finished ? "Fin de la partida" : myTurn ? "Tu turno" : "Turno del rival"}
           {!view.finished && <span className={"timer" + (left <= 15 ? " low" : "")}>{left}s</span>}
