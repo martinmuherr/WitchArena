@@ -62,9 +62,22 @@ BANNED_NAMES = {
     "Charge", "Warsong Commander", "Rampage", "Fire Plume's Heart", "Scourgelord Garrosh",
     # Neutral
     "Vicious Fledgling",
-    # Añadidas en el parche 11.0
-    "Humongous Razorleaf", "Ancient Watcher",
 }
+# En la sala de El Bosque Embrujado se suman las dos cartas que el parche 11.0 sacó
+# del draft ("Humongous Razorleaf" y "Ancient Watcher"); ver rooms.py.
+BANNED_NAMES_BASE = frozenset(BANNED_NAMES)
+BANNED_NAMES |= {"Humongous Razorleaf", "Ancient Watcher"}
+
+
+def for_room(room):
+    """Sets, set más reciente y cartas prohibidas de una sala."""
+    from . import rooms
+    cfg = rooms.ROOMS[rooms.normalize(room)]
+    return {
+        "arena_sets": cfg["arena_sets"],
+        "newest_set": cfg["newest_set"],
+        "banned": set(BANNED_NAMES_BASE) | set(cfg["extra_bans"]),
+    }
 
 # Las 9 cartas exclusivas de Arena del parche 10.4 se añadieron "por tiempo limitado".
 # No hemos encontrado confirmación de que siguieran en la 11.0, así que por defecto NO entran.

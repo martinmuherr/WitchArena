@@ -113,3 +113,19 @@ def init_schema():
     ts = "TIMESTAMP" if IS_PG else "TEXT"
     for stmt in SCHEMA:
         execute(stmt.format(serial=serial, ts=ts))
+    _migrate()
+
+
+def _columns(table):
+    if IS_PG:
+        rows = query("SELECT column_name FROM information_schema.columns WHERE table_name = ?", (table,))
+        return {r["column_name"] for r in rows}
+    return {r["name"] for r in query(f"PRAGMA table_info({table})")}
+
+
+def _migrate():
+    """Cambios de esquema sobre bases de datos ya creadas."""
+    # Salas: cada run pertenece a una sala (las antiguas son de El Bosque Embrujado).
+    if "room" not in _columns("arena_runs"):
+        execute("ALTER TABLE arena_runs ADD COLUMN room VARCHAR(20) NOT NULL DEFAULT 'witchwood'")
+    execute("CREATE INDEX IF NOT EXISTS idx_runs_user_room ON arena_runs(user_id, room, status)")

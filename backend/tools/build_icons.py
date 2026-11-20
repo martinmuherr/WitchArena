@@ -196,9 +196,15 @@ def main():
     src, out_dir, out_json = sys.argv[1:4]
     files, by_token = index_icons(src)
     os.makedirs(out_dir, exist_ok=True)
-    db = engine_db()
+    from app import rooms
     mapping, used = {}, {}
-    for cid, c in db.items():
+    items, seen = [], set()
+    for room in rooms.ROOMS:  # cartas de todas las salas
+        for cid, c in engine_db(room).items():
+            if cid not in seen:
+                seen.add(cid)
+                items.append((cid, c))
+    for cid, c in items:
         if c.type not in (CardType.MINION, CardType.SPELL, CardType.WEAPON, CardType.HERO, CardType.HERO_POWER):
             continue
         if c.type == CardType.HERO and c.id in R.CLASSES.values():
@@ -217,7 +223,8 @@ def main():
             f.write(svg)
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(mapping, f, separators=(",", ":"))
-    pool = {cid for cls in __import__("app.cards", fromlist=["x"]).arena_pool().values()
+    pool = {cid for room in rooms.ROOMS
+            for cls in __import__("app.cards", fromlist=["x"]).arena_pool(room).values()
             for r in cls.values() for cid, _ in r}
     generic = set(CLASS_ICON.values()) | set(TYPE_ICON.values()) | set(RACE_ICON.values())
     fallback = sum(1 for c in pool if mapping.get(c) in generic)

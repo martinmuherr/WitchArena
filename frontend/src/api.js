@@ -2,12 +2,24 @@
 // el token CSRF se guarda en memoria y se manda en cada petición que cambia algo.
 let csrf = null;
 
+let room = null;
+
 export function setCsrf(token) {
   csrf = token;
 }
 
+// Sala elegida (El Bosque Embrujado o Kóbolds y Catacumbas): va en cada petición.
+export function setRoom(r) {
+  room = r;
+}
+
+export function getRoom() {
+  return room;
+}
+
 async function request(method, path, data) {
   const opts = { method, headers: {}, credentials: "same-origin" };
+  if (room) opts.headers["X-Room"] = room;
   if (method !== "GET") {
     opts.headers["Content-Type"] = "application/json";
     if (csrf) opts.headers["X-CSRF-Token"] = csrf;

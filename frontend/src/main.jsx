@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { useEffect, useState, useCallback } from "react";
-import { api, setCsrf } from "./api.js";
-import { Card } from "./Card.jsx";
+import { api, setCsrf, setRoom } from "./api.js";
+import { Card, CardArt, RichText } from "./Card.jsx";
 import { GameBoard, HoverPreview } from "./Game.jsx";
 import "./styles.css";
 
@@ -30,7 +30,7 @@ function Auth({ onLogin }) {
   return (
     <div className="auth">
       <h1 className="logo">WitchArena</h1>
-      <p className="tagline">El Arena de Hearthstone tal y como era al llegar El Bosque Embrujado (abril de 2018).</p>
+      <p className="tagline">El Arena de Hearthstone de 2017-2018: Kóbolds y Catacumbas o El Bosque Embrujado, tal y como eran al salir.</p>
       <form className="panel" onSubmit={submit}>
         <div className="tabs">
           <button type="button" className={mode === "login" ? "on" : ""} onClick={() => setMode("login")}>Entrar</button>
@@ -130,8 +130,24 @@ function Draft({ run, onUpdate }) {
         <h2>Elige tu clase</h2>
         <div className="heroes">
           {d.hero_options.map((h, i) => (
-            <button key={h.key} className={"hero-pick c-" + h.key.toLowerCase()} onClick={() => pick("/api/run/hero", i)}>
-              {h.name}
+            <button key={h.key} className={"hero-pick portrait c-" + h.key.toLowerCase()} onClick={() => pick("/api/run/hero", i)}>
+              <div className="hp-art">
+                <CardArt id={h.hero} big cls={h.key.toLowerCase()} className="hp-img" />
+              </div>
+              <span className="hp-name">{h.name}</span>
+              {h.hero_name && <span className="hp-hero">{h.hero_name}</span>}
+              {h.power && (
+                <div className="hp-tip">
+                  <div className="hp-power-art">
+                    <CardArt id={h.power.id} icon={h.power.icon} cls={h.power.class_key} className="hp-pimg" />
+                  </div>
+                  <div>
+                    <span className="hp-pname">{h.power.name}</span>
+                    <span className="hp-cost">Poder de héroe · {h.power.cost} de maná</span>
+                    <p><RichText text={(h.power.text || "").replace(/^<b>Poder de héroe<\/b>\s*/i, "")} /></p>
+                  </div>
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -155,7 +171,49 @@ function Draft({ run, onUpdate }) {
   );
 }
 
-function Lobby({ user, onLogout }) {
+function RoomSelect({ user, onPick, onLogout }) {
+  const [rooms, setRooms] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.get("/api/rooms").then((r) => alive && setRooms(r.rooms)).catch((e) => alive && setError(e.message));
+    load();
+    const t = setInterval(load, 5000); // conectados en cada sala, casi en directo
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  return (
+    <div className="lobby">
+      <header className="topbar">
+        <span className="logo small">WitchArena</span>
+        <span className="who">{user}</span>
+        <button onClick={onLogout}>Salir</button>
+      </header>
+      <div className="rooms-screen">
+        <h2>Elige sala</h2>
+        <p className="hint">Cada sala tiene su propia colección de cartas, sus propias runs de Arena y su propia cola.</p>
+        {error && <p className="error">{error}</p>}
+        {!rooms ? <div className="loading">Cargando salas…</div> : (
+          <div className="rooms">
+            {rooms.map((r) => (
+              <button key={r.key} className="room-card" onClick={() => onPick(r)}>
+                <div className="rc-art"><CardArt id={r.art} big className="rc-img" /></div>
+                <span className="rc-online">{r.online} {r.online === 1 ? "conectado" : "conectados"}</span>
+                <div className="rc-body">
+                  <h3>{r.name}</h3>
+                  <div className="rc-sub">{r.subtitle}</div>
+                  <p className="rc-desc">{r.description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <Disclaimer />
+    </div>
+  );
+}
+
+function Lobby({ user, room, onLogout, onChangeRoom }) {
   const [run, setRun] = useState(undefined);
   const [queue, setQueue] = useState({ status: "idle" });
   const [gameId, setGameId] = useState(null);
@@ -174,6 +232,12 @@ function Lobby({ user, onLogout }) {
   useEffect(() => {
     load().catch((e) => setError(e.message));
   }, [load]);
+
+  // latido: así la sala cuenta que estás conectado aunque no hagas nada
+  useEffect(() => {
+    const t = setInterval(() => api.get("/api/rooms").catch(() => {}), 25000);
+    return () => clearInterval(t);
+  }, []);
 
   // Mientras estás en la cola, preguntamos cada 2 s si ya hay rival
   useEffect(() => {
@@ -208,7 +272,12 @@ function Lobby({ user, onLogout }) {
     <div className="lobby">
       <header className="topbar">
         <span className="logo small">WitchArena</span>
+        <span className="room-tag">{room.name}</span>
         <span className="who">{user}</span>
+        <button onClick={() => act(async () => {
+          if (queue.status === "queued") await api.post("/api/queue/leave");
+          onChangeRoom();
+        })}>Cambiar de sala</button>
         <button onClick={onLogout}>Salir</button>
       </header>
       {error && <p className="error">{error}</p>}
@@ -257,7 +326,8 @@ function Lobby({ user, onLogout }) {
           <h3>Tus últimos Arenas</h3>
           <ul>
             {history.map((h) => (
-              <li key={h.id}><b>{h.class}</b> · {h.wins}-{h.losses}{h.status === "retired" ? " (retirado)" : ""}</li>
+              <li key={h.id}><b>{h.class}</b> · {h.wins}-{h.losses}{h.status === "retired" ? " (retirado)" : ""}
+                <span className="hint"> · {h.room_name}</span></li>
             ))}
           </ul>
         </div>
@@ -269,15 +339,29 @@ function Lobby({ user, onLogout }) {
 
 function App() {
   const [user, setUser] = useState(undefined);
+  const [room, setRoomState] = useState(null);
+  const chooseRoom = (r) => {
+    setRoom(r ? r.key : null);
+    setRoomState(r);
+  };
+  const enter = async () => {
+    const r = await api.get("/api/me");
+    if (r.csrf) setCsrf(r.csrf);
+    setUser(r.user ? r.user.username : null);
+    // si tienes una partida en marcha, vuelves directamente a su sala
+    if (r.game_room) {
+      const list = (await api.get("/api/rooms")).rooms;
+      chooseRoom(list.find((x) => x.key === r.game_room) || null);
+    }
+  };
   useEffect(() => {
-    api.get("/api/me").then((r) => {
-      if (r.csrf) setCsrf(r.csrf);
-      setUser(r.user ? r.user.username : null);
-    }).catch(() => setUser(null));
+    enter().catch(() => setUser(null));
   }, []);
+  const logout = async () => { await api.post("/api/logout"); setCsrf(null); chooseRoom(null); setUser(null); };
   if (user === undefined) return <div className="loading">Cargando…</div>;
-  if (!user) return <Auth onLogin={setUser} />;
-  return <Lobby user={user} onLogout={async () => { await api.post("/api/logout"); setCsrf(null); setUser(null); }} />;
+  if (!user) return <Auth onLogin={() => enter().catch(() => setUser(null))} />;
+  if (!room) return <RoomSelect user={user} onPick={chooseRoom} onLogout={logout} />;
+  return <Lobby key={room.key} user={user} room={room} onLogout={logout} onChangeRoom={() => chooseRoom(null)} />;
 }
 
 createRoot(document.getElementById("root")).render(<App />);

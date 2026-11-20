@@ -142,7 +142,8 @@ CS2_004e = buff(health=2)
 class CS1_112:
     """Holy Nova"""
 
-    play = Hit(ENEMY_MINIONS, 2), Heal(FRIENDLY_CHARACTERS, 2)
+    # HS_WitchArena: en 2017-2018 dañaba a todos los enemigos, héroe incluido
+    play = Hit(ENEMY_CHARACTERS, 2), Heal(FRIENDLY_CHARACTERS, 2)
 
 
 class CS1_113:

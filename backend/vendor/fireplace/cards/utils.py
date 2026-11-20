@@ -225,12 +225,31 @@ def GainEmptyMana(selector, amount):
     return GainMana(selector, amount).then(SpendMana(selector, GainMana.AMOUNT))
 
 
+CUSTOM_CARDS = {}  # HS_WitchArena: para volver a registrarlas al cargar otra sala
+
+
+def register_custom_cards():
+    """HS_WitchArena: añade a la base de datos actual las cartas creadas con @custom_card
+    (los módulos de scripts solo se importan una vez)."""
+    from . import db
+
+    for id, cls in CUSTOM_CARDS.items():
+        if id not in db:  # igual que al importar: si la carta existe en los datos, mandan los datos
+            _register_custom(cls)
+
+
 def custom_card(cls):
+    if GameTag.CARDNAME not in cls.tags:
+        raise ValueError("No name provided for custom card %r" % (cls))
+    CUSTOM_CARDS[cls.__name__] = cls
+    _register_custom(cls)
+    return cls
+
+
+def _register_custom(cls):
     from . import CardDB, db
 
     id = cls.__name__
-    if GameTag.CARDNAME not in cls.tags:
-        raise ValueError("No name provided for custom card %r" % (cls))
     db[id] = CardDB.merge(id, None, cls)
     # Give the card its fake name
     db[id].strings = {

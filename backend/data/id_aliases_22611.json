@@ -1,0 +1,20 @@
+{
+ "AT_132_DRUID": "HERO_06bp2",
+ "AT_132_HUNTER": "HERO_05bp2",
+ "AT_132_MAGE": "HERO_08bp2",
+ "AT_132_PALADIN": "HERO_04bp2",
+ "AT_132_PRIEST": "HERO_09bp2",
+ "AT_132_ROGUE": "HERO_03bp2",
+ "AT_132_SHAMAN": "HERO_02bp2",
+ "AT_132_WARLOCK": "HERO_07bp2",
+ "AT_132_WARRIOR": "HERO_01bp2",
+ "CS1h_001": "HERO_09bp",
+ "CS2_017": "HERO_06bp",
+ "CS2_034": "HERO_08bp",
+ "CS2_049": "HERO_02bp",
+ "CS2_056": "HERO_07bp",
+ "CS2_083b": "HERO_03bp",
+ "CS2_101": "HERO_04bp",
+ "CS2_102": "HERO_01bp",
+ "DS1h_292": "HERO_05bp"
+}

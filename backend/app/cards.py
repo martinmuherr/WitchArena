@@ -15,6 +15,7 @@ from hearthstone.enums import CardClass, CardSet, CardType, Rarity  # noqa: E402
 from hearthstone_data import get_carddefs_path  # noqa: E402
 
 from . import arena_rules as R  # noqa: E402
+from . import rooms  # noqa: E402
 
 TYPE_ES = {
     CardType.MINION: "Esbirro", CardType.SPELL: "Hechizo", CardType.WEAPON: "Arma",
@@ -34,6 +35,8 @@ SET_ES = {
     CardSet.BASIC: "Básico", CardSet.EXPERT1: "Clásico", CardSet.HOF: "Salón de la Fama",
     CardSet.UNGORO: "Viaje a Un'Goro", CardSet.ICECROWN: "Caballeros del Trono Helado",
     CardSet.LOOTAPALOOZA: "Kóbolds y Catacumbas", CardSet.GILNEAS: "El Bosque Embrujado",
+    CardSet.OG: "Susurros de los Dioses Antiguos", CardSet.KARA: "Una Noche en Karazhan",
+    CardSet.GANGS: "Mafias de Gadgetzan",
 }
 
 _ALLOWED_TAGS = re.compile(r"</?(b|i)>")
@@ -64,20 +67,26 @@ def card_icons():
         return {}
 
 
-@lru_cache(maxsize=1)
-def spanish_db():
-    db, _ = cardxml.load(get_carddefs_path(), locale="esES")
+@lru_cache(maxsize=4)
+def _spanish_db(room):
+    path = rooms.ROOMS[room]["carddefs"] if room else get_carddefs_path()
+    db, _ = cardxml.load(path, locale="esES")
     return db
 
 
-def engine_db():
-    if not fp_cards.db.initialized:
-        fp_cards.db.initialize()
+def spanish_db(room=None):
+    """Textos en español de la sala indicada (o de la sala activa)."""
+    return _spanish_db(rooms.normalize(room or rooms.active()))
+
+
+def engine_db(room=None):
+    """Base de datos del motor con la sala indicada (o la activa) cargada."""
+    rooms.activate(room or rooms.active() or rooms.DEFAULT_ROOM)
     return fp_cards.db
 
 
 def card_view(card_id):
-    """Datos públicos de una carta para mostrar en la web (sin arte)."""
+    """Datos públicos de una carta (de la sala activa) para mostrar en la web."""
     es = spanish_db().get(card_id)
     c = engine_db().get(card_id) or es
     if c is None:
@@ -105,24 +114,29 @@ def _effective_rarity(c):
     return Rarity.COMMON if c.rarity == Rarity.FREE else c.rarity
 
 
-@lru_cache(maxsize=1)
-def arena_pool():
-    """Devuelve {clase: {rareza: [(card_id, peso), ...]}} con las cartas draftables."""
-    db = engine_db()
+def arena_pool(room=None):
+    """Devuelve {clase: {rareza: [(card_id, peso), ...]}} con las cartas draftables de la sala."""
+    return _arena_pool(rooms.normalize(room or rooms.active()))
+
+
+@lru_cache(maxsize=4)
+def _arena_pool(room):
+    db = engine_db(room)
+    rules = R.for_room(room)
     pool = {cls: {r: [] for r in R.RARITY_WEIGHTS} for cls in R.CLASSES}
     for cid, c in db.items():
-        if not c.collectible or c.card_set not in R.ARENA_SETS:
+        if not c.collectible or c.card_set not in rules["arena_sets"]:
             continue
         if c.type not in (CardType.MINION, CardType.SPELL, CardType.WEAPON, CardType.HERO):
             continue
-        if c.name in R.BANNED_NAMES:
+        if c.name in rules["banned"]:
             continue
         # Los héroes básicos (Jaina, Garrosh...) son "cartas" en los datos, pero no se draftean.
         # Las cartas de héroe de verdad (p. ej. Hagatha, la Bruja) sí.
         if c.type == CardType.HERO and (c.card_set == CardSet.BASIC or cid in R.CLASSES.values()):
             continue
         rarity = _effective_rarity(c)
-        weight = R.NEWEST_SET_WEIGHT if c.card_set == R.NEWEST_SET else 1.0
+        weight = R.NEWEST_SET_WEIGHT if c.card_set == rules["newest_set"] else 1.0
         if c.card_class == CardClass.NEUTRAL:
             classes = list(R.CLASSES)
         elif c.card_class in R.CLASSES:
@@ -135,7 +149,8 @@ def arena_pool():
     return pool
 
 
-def banned_names_missing():
+def banned_names_missing(room=None):
     """Nombres prohibidos que no existen en los datos (para detectar erratas)."""
-    names = {c.name for c in engine_db().values()}
-    return sorted(n for n in R.BANNED_NAMES if n not in names)
+    room = rooms.normalize(room)
+    names = {c.name for c in engine_db(room).values()}
+    return sorted(n for n in R.for_room(room)["banned"] if n not in names)

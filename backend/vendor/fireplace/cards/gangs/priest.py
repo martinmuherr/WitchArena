@@ -8,11 +8,20 @@ from ..utils import *
 class CFM_020:
     """Raza the Chained"""
 
-    play = Buff(CONTROLLER, "CFM_020e")
+    # HS_WitchArena: faltaba la condición "si tu mazo no tiene cartas repetidas"
+    powered_up = -FindDuplicates(FRIENDLY_DECK)
+    play = powered_up & Buff(CONTROLLER, "CFM_020e")
+
+
+def _raza_cost(self, i):
+    # (0) en la sala de Kóbolds (dic. 2017) y (1) en la de El Bosque Embrujado (abr. 2018)
+    from fireplace import cards as _cards
+
+    return getattr(_cards, "room_settings", {}).get("raza_cost", 0)
 
 
 class CFM_020e:
-    update = Refresh(FRIENDLY_HERO_POWER, {GameTag.COST: SET(0)})
+    update = Refresh(FRIENDLY_HERO_POWER, {GameTag.COST: _raza_cost})
 
 
 class CFM_605:

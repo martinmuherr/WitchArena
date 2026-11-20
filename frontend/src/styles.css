@@ -124,7 +124,8 @@ label { display: block; margin: 12px 0; font-size: 14px; color: var(--muted); }
 .minion.f-taunt { border: 4px double #b4b4a6; border-radius: 14px; }
 .minion.f-divine_shield { box-shadow: 0 0 0 3px #f6e27a, 0 0 18px #f6e27a; }
 .minion.f-stealthed { opacity: .6; border-style: dashed; }
-.minion.f-frozen { background: linear-gradient(#5c8fb5, #2a4a63); }
+.minion.f-frozen { border-color: #9fd8ff; }
+.minion.f-frozen .m-art.art-img { filter: saturate(.55) brightness(1.05) hue-rotate(-10deg); }
 .minion.f-silenced .m-text { text-decoration: line-through; }
 .minion.f-dormant { filter: grayscale(.8); }
 .minion.can-act, .hero.can-act { border-color: #6fcf5a; box-shadow: 0 0 12px #6fcf5a; }
@@ -441,7 +442,7 @@ body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-i
 .cast-overlay { position: fixed; inset: 0; z-index: 44; pointer-events: none; display: flex; align-items: center; }
 .cast-overlay.opp { justify-content: flex-start; padding-left: 9vw; }
 .cast-overlay.mine { justify-content: flex-start; padding-left: 9vw; }
-.cast-card { position: relative; animation: cast-in 1.7s ease-out forwards; }
+.cast-card { position: relative; animation: cast-in var(--ov-ms, 1.7s) ease-out forwards; }
 .cast-overlay.mine .cast-card { margin-top: 18vh; }
 .cast-overlay.opp .cast-card { margin-top: -18vh; }
 .cast-card .card { width: 240px; min-height: 336px; box-shadow: 0 20px 50px #000e, 0 0 30px #f2c66b55; }
@@ -494,3 +495,76 @@ body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-i
 .opp-hand .card-back { height: min(76px, 7vh); width: min(54px, 5vh); }
 .midline { padding: 3px 0; margin: 3px 0; }
 .mana-n { background: #0b1a2ecc; border: 1px solid #6ea8ec88; border-radius: 14px; padding: 1px 10px; }
+
+/* ===================== Congelado: rombos de hielo alrededor del marco ===================== */
+.ice { position: absolute; inset: -4px; pointer-events: none; z-index: 3; border-radius: inherit;
+  box-shadow: inset 0 0 14px 2px #bfe8ffaa, 0 0 10px 2px #7cc8ff88; }
+.ice .shard { position: absolute; display: block;
+  background: linear-gradient(135deg, #ffffff 0%, #d6f1ff 30%, #7cc8ff 65%, #2f7fc0 100%);
+  border: 1px solid #e9f8ffcc; box-shadow: 0 0 6px #9fdcff, inset 0 0 3px #fff;
+  animation: ice-in .45s ease-out both; }
+@keyframes ice-in { 0% { opacity: 0; filter: brightness(2.5); } 100% { filter: none; } }
+.hero .ice { border-radius: 50% 50% 18px 18px; z-index: 3; }
+
+/* ===================== Carta jugada (todas) y nuevo héroe ===================== */
+.cast-who { position: absolute; left: 50%; top: -30px; transform: translateX(-50%); white-space: nowrap;
+  font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--amber2); text-shadow: 0 2px 6px #000; }
+.cast-overlay.k-minion .cast-card .card, .cast-overlay.k-weapon .cast-card .card { width: 200px; min-height: 280px; }
+.cast-overlay.k-hero { justify-content: center; padding-left: 0; }
+.cast-overlay.k-hero .cast-card { margin-top: 0; }
+.hero-swap { position: relative; display: flex; align-items: center; justify-content: center; width: 420px; height: 360px; }
+.hero-swap .hero-old, .hero-swap .hero-new { position: absolute; }
+.hero-swap .hero-old .card { width: 200px; min-height: 280px; filter: grayscale(.6) brightness(.7); }
+.hero-swap .hero-new .card { width: 250px; min-height: 350px; box-shadow: 0 0 60px 18px #f2c66bcc, 0 20px 50px #000e; }
+.hero-old { animation: hero-old 2.6s ease-in forwards; }
+.hero-new { animation: hero-new 2.6s ease-out forwards; }
+@keyframes hero-old { 0% { opacity: 1; transform: translateX(0) scale(1); } 30% { opacity: 1; transform: translateX(-120px) rotate(-8deg) scale(.9); }
+  45% { opacity: 0; transform: translateX(-160px) rotate(-14deg) scale(.7); } 100% { opacity: 0; } }
+@keyframes hero-new { 0%, 25% { opacity: 0; transform: scale(.3) rotate(10deg); } 45% { opacity: 1; transform: scale(1.12) rotate(0); }
+  55% { transform: scale(1); } 100% { opacity: 1; transform: scale(1); } }
+.hero-flash { position: fixed; inset: 0; background: radial-gradient(circle, #ffe9a866 0%, #f2c66b33 35%, #0000 70%);
+  animation: secret-flash 2.6s ease-out forwards; }
+.hero-banner { background: linear-gradient(#e2b54a, #8a6418); border-color: #fff1c4; box-shadow: 0 0 22px #f2c66b; bottom: -34px; }
+
+/* ===================== Elección de clase con retrato y poder ===================== */
+.hero-pick.portrait { position: relative; width: 210px; height: 300px; padding: 0; overflow: visible; display: flex; flex-direction: column;
+  align-items: stretch; justify-content: flex-end; }
+.hero-pick .hp-art { position: absolute; inset: 0; border-radius: 12px; overflow: hidden; }
+.hero-pick .hp-art .art-img, .hero-pick .hp-art .art { width: 100%; height: 100%; object-fit: cover; }
+.hero-pick .hp-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(#0000 50%, #000e 92%); }
+.hero-pick .hp-name { position: relative; z-index: 1; padding: 0 8px 4px; font-size: 28px; text-shadow: 0 2px 6px #000; }
+.hero-pick .hp-hero { position: relative; z-index: 1; padding: 0 8px 12px; font-family: var(--sans, sans-serif); font-size: 13px; color: var(--muted); }
+.hero-pick:hover { transform: translateY(-4px); box-shadow: 0 0 24px #f2c66b88; }
+.hp-tip { position: absolute; left: 50%; top: calc(100% + 10px); transform: translateX(-50%); width: 240px; z-index: 5;
+  background: #1b140bf2; border: 2px solid #8a6a32; border-radius: 12px; padding: 10px; display: none; text-align: left;
+  font-family: var(--sans, sans-serif); box-shadow: 0 10px 30px #000c; }
+.hero-pick:hover .hp-tip, .hero-pick:focus-visible .hp-tip { display: flex; gap: 10px; align-items: center; }
+.hp-tip .hp-power-art { flex: 0 0 64px; width: 64px; height: 64px; border-radius: 50%; overflow: hidden; border: 2px solid #c9a24f; }
+.hp-tip .hp-power-art .art-img, .hp-tip .hp-power-art .art { width: 100%; height: 100%; object-fit: cover; }
+.hp-tip .hp-pname { display: block; color: var(--amber2); font-size: 16px; font-weight: 700; font-family: var(--serif); margin-bottom: 2px; }
+.hp-tip .hp-cost { display: block; }
+.hp-tip .hp-cost { color: #7fc4ff; font-weight: 700; font-size: 12px; }
+.hp-tip p { margin: 2px 0 0; font-size: 13px; line-height: 1.3; color: #eee; }
+
+/* ===================== Selección de sala ===================== */
+.rooms-screen { max-width: 980px; margin: 0 auto; padding: 24px 16px; text-align: center; }
+.rooms { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+.room-card { position: relative; width: 400px; height: 300px; border-radius: 16px; overflow: hidden; border: 3px solid #8a6a32; cursor: pointer;
+  padding: 0; text-align: left; background: #1b140b; box-shadow: 0 10px 30px #000b; transition: transform .15s, box-shadow .15s; }
+.room-card:hover { transform: translateY(-4px); box-shadow: 0 0 30px #f2c66b99; border-color: var(--amber2); }
+.room-card .rc-art { position: absolute; inset: 0; }
+.room-card .rc-art .art-img, .room-card .rc-art .art { width: 100%; height: 100%; object-fit: cover; }
+.room-card .rc-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(#0003 20%, #000e 85%); }
+.room-card .rc-body { position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 18px; z-index: 1; }
+.room-card h3 { margin: 0; font-family: var(--serif); font-size: 28px; color: var(--amber2); text-shadow: 0 2px 6px #000; }
+.room-card .rc-sub { font-size: 13px; color: #ddd; margin: 2px 0 8px; }
+.room-card .rc-desc { font-size: 13px; color: #ccc; margin: 0; line-height: 1.35; }
+.room-card .rc-online { position: absolute; top: 12px; right: 12px; z-index: 1; background: #000b; border: 1px solid #6fcf5a;
+  color: #bff5b3; border-radius: 20px; padding: 4px 12px; font-size: 14px; font-weight: 700; }
+.room-card .rc-online::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #6fcf5a;
+  margin-right: 7px; box-shadow: 0 0 8px #6fcf5a; animation: pulse 2s infinite; }
+.room-tag { font-size: 13px; color: var(--amber2); border: 1px solid #8a6a32; border-radius: 14px; padding: 3px 10px; }
+.hero-pick .hp-art .art-fallback, .room-card .rc-art .art-fallback { width: 100%; height: 100%; }
+.hp-tip .hp-power-art .art-fallback { width: 100%; height: 100%; }
+.hero > .ice, .minion > .ice { position: absolute; inset: -6px; }
+.hero > .stat, .minion > .stat { z-index: 4; }

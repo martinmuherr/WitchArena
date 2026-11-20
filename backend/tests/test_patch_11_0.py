@@ -7,7 +7,7 @@ from hearthstone.enums import CardClass, Race
 
 
 def _game(hero1="HERO_07", hero2="HERO_03"):
-    engine_db()
+    engine_db("witchwood")
     deck = ["CS2_182"] * 30  # Yeti de invierno
     g = Game(players=[Player("A", list(deck), hero1), Player("B", list(deck), hero2)])
     g.start()
@@ -17,7 +17,7 @@ def _game(hero1="HERO_07", hero2="HERO_03"):
 
 
 def test_costes_y_stats_de_la_11_0():
-    db = engine_db()
+    db = engine_db("witchwood")
     assert db["EX1_620"].cost == 20      # Gigante fundido (vuelve a 20 en la 11.0)
     assert db["LOOT_539"].cost == 6      # Invocadora rencorosa (nerf a 7 en la 11.1)
     assert db["LOOT_306"].cost == 5      # Lacayo poseído
@@ -67,9 +67,9 @@ def test_portal_de_mana_6_hechizos():
 
 
 def test_pool_sin_salon_de_la_fama_ni_prohibidas():
-    pool = arena_pool()
+    pool = arena_pool("witchwood")
     ids = {cid for r in pool[CardClass.MAGE].values() for cid, _ in r}
-    db = engine_db()
+    db = engine_db("witchwood")
     names = {db[c].name for c in ids}
     assert "Ice Block" not in names        # Salón de la Fama en la 11.0
     assert "Frost Lich Jaina" not in names  # prohibida en Arena
@@ -135,8 +135,8 @@ def test_coleccionista_de_bibelots_crece_al_robar():
 
 def test_heroes_basicos_no_salen_en_el_draft():
     from hearthstone.enums import CardType
-    db = engine_db()
-    ids = {cid for cls in arena_pool().values() for r in cls.values() for cid, _ in r}
+    db = engine_db("witchwood")
+    ids = {cid for cls in arena_pool("witchwood").values() for r in cls.values() for cid, _ in r}
     heroes = {db[c].name for c in ids if db[c].type == CardType.HERO}
     assert "Jaina Proudmoore" not in heroes and "Garrosh Hellscream" not in heroes
     assert "Hagatha the Witch" in heroes
@@ -183,7 +183,7 @@ def test_glinda_da_eco_a_los_esbirros_de_la_mano():
 def test_vanguardia_de_plata_recluta_un_8():
     from fireplace.game import Game
     from fireplace.player import Player
-    engine_db()
+    engine_db("witchwood")
     deck = ["EX1_298"] * 30   # Ragnaros (coste 8)
     g = Game(players=[Player("A", list(deck), "HERO_04"), Player("B", list(deck), "HERO_04")])
     g.start()
@@ -194,3 +194,13 @@ def test_vanguardia_de_plata_recluta_un_8():
     p.discard_hand()
     p.give("LOOT_184").play().destroy()
     assert [m.id for m in p.field] == ["EX1_298"]
+
+
+def test_nova_sagrada_dana_al_heroe_enemigo():
+    g = _game(hero1="HERO_09")
+    p = g.player1
+    p.max_mana = 10
+    p.discard_hand()
+    hp = p.opponent.hero.health
+    p.give("CS1_112").play()
+    assert p.opponent.hero.health == hp - 2

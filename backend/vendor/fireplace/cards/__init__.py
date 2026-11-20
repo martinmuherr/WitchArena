@@ -9,7 +9,8 @@ from ..logging import log
 from ..utils import CARD_SETS
 
 
-year = ZodiacYear.RAVEN  # HS_WitchArena: Año del Cuervo (abril 2018)
+year = ZodiacYear.RAVEN  # HS_WitchArena: Año del Cuervo (abril 2018); cada sala lo cambia
+room_settings = {"raza_cost": 1}  # HS_WitchArena: ajustes que dependen de la sala
 default_language = "enUS"
 standard_board_skins = [
     BoardEnum.STORMWIND,
@@ -190,15 +191,20 @@ class CardDB(dict[str, cardxml.CardXML]):
 
         return card
 
-    def initialize(self, locale=default_language):
+    def initialize(self, locale=default_language, path=None, extra_path=None, alias_path=None):
         log.info("Initializing card database")
         self.initialized = True
-        # HS_WitchArena: cargamos los datos de la build 23966 (parche 11.0) y,
-        # aparte, encantamientos técnicos posteriores que el motor necesita.
-        db, _ = cardxml.load(locale=locale)
-        extra_path = os.path.join(
-            os.path.dirname(cardxml_path_hint()), "CardDefs_extra.xml"
-        )
+        # HS_WitchArena: cargamos los datos de la build de la sala (23966 = parche 11.0,
+        # 22611 = parche 10.0) y, aparte, encantamientos técnicos posteriores que el motor
+        # necesita. Sin argumentos se usa la build 23966.
+        if path:
+            db, _ = cardxml.load(path=path, locale=locale)
+        else:
+            db, _ = cardxml.load(locale=locale)
+        if extra_path is None:
+            extra_path = os.path.join(
+                os.path.dirname(cardxml_path_hint()), "CardDefs_extra.xml"
+            )
         if os.path.exists(extra_path):
             extra, _ = cardxml.load(path=extra_path, locale=locale)
             for id, card in extra.items():
@@ -210,7 +216,8 @@ class CardDB(dict[str, cardxml.CardXML]):
         import copy
         import json
 
-        alias_path = os.path.join(os.path.dirname(cardxml_path_hint()), "id_aliases.json")
+        if alias_path is None:
+            alias_path = os.path.join(os.path.dirname(cardxml_path_hint()), "id_aliases.json")
         aliases = {}
         if os.path.exists(alias_path):
             with open(alias_path, encoding="utf-8") as f:

@@ -57,6 +57,41 @@ export function HoverPreview({ hover }) {
   );
 }
 
+// Hielo: rombos azules repartidos sin orden fijo por el borde del marco
+const SHARDS = (() => {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  const out = [];
+  const n = 22;
+  for (let i = 0; i < n; i++) {
+    const t = i / n;
+    // recorre el borde: arriba, derecha, abajo, izquierda
+    let x, y;
+    if (t < 0.25) { x = t * 4; y = 0; } else if (t < 0.5) { x = 1; y = (t - 0.25) * 4; }
+    else if (t < 0.75) { x = 1 - (t - 0.5) * 4; y = 1; } else { x = 0; y = 1 - (t - 0.75) * 4; }
+    out.push({
+      left: (x * 100 + (rnd() - 0.5) * 14).toFixed(1) + "%",
+      top: (y * 100 + (rnd() - 0.5) * 14).toFixed(1) + "%",
+      w: (9 + rnd() * 14).toFixed(0), h: (16 + rnd() * 22).toFixed(0),
+      rot: (rnd() * 70 - 35).toFixed(0), op: (0.65 + rnd() * 0.35).toFixed(2), d: (rnd() * 0.25).toFixed(2),
+    });
+  }
+  return out;
+})();
+
+export function Frozen() {
+  return (
+    <div className="ice">
+      {SHARDS.map((sh, i) => (
+        <span key={i} className="shard" style={{
+          left: sh.left, top: sh.top, width: sh.w + "px", height: sh.h + "px", opacity: sh.op,
+          transform: `translate(-50%,-50%) rotate(${sh.rot}deg) scaleX(.62) rotate(45deg)`, animationDelay: sh.d + "s",
+        }} />
+      ))}
+    </div>
+  );
+}
+
 function Minion({ m, onClick, targetable, active, canAct, hoverProps }) {
   const flags = m.flags || [];
   const cls = ["minion", ...flags.map((f) => "f-" + f), targetable ? "targetable" : "",
@@ -72,6 +107,7 @@ function Minion({ m, onClick, targetable, active, canAct, hoverProps }) {
       </div>
       <div className={"stat atk" + (buffed && m.atk > m.base.atk ? " up" : "")}>{m.atk}</div>
       <div className={"stat hp" + (m.damage ? " hurt" : buffed && m.health > m.base.health ? " up" : "")}>{m.health}</div>
+      {flags.includes("frozen") && <Frozen />}
     </div>
   );
 }
@@ -102,6 +138,7 @@ function Hero({ side, onClick, targetable, active, canAct, mine, onPower, powerA
         {h.atk > 0 && <div className="stat atk">{h.atk}</div>}
         <div className={"stat hp" + (h.damage ? " hurt" : "")}>{h.health}</div>
         {h.armor > 0 && <div className="stat armor">{h.armor}</div>}
+        {(h.flags || []).includes("frozen") && <Frozen />}
         {side.secrets.length > 0 && (
           <div className="secrets" title={mine ? side.secrets.map((s) => s.name).join(", ") : "Secretos del rival"}>
             {side.secrets.length} ?
@@ -199,20 +236,41 @@ function DrawFlyer({ f, onDone }) {
   return <div ref={ref} className="draw-flyer" style={{ left: f.from.x + "px", top: f.from.y + "px", opacity: 0 }} />;
 }
 
-// Carta lanzada o secreto revelado, en grande unos instantes
+// Carta jugada, secreto revelado o nuevo héroe, en grande unos instantes
+const OVERLAY_MS = { secret: 2000, hero_change: 2600, spell: 1700, minion: 1150, weapon: 1300, hidden: 1400 };
+
+function overlayMs(ev) {
+  if (ev.type === "secret") return OVERLAY_MS.secret;
+  if (ev.type === "hero_change") return OVERLAY_MS.hero_change;
+  if (ev.secret) return OVERLAY_MS.hidden;
+  return OVERLAY_MS[ev.kind] || OVERLAY_MS.spell;
+}
+
 function CastOverlay({ ev }) {
   const isSecretReveal = ev.type === "secret";
+  const isHero = ev.type === "hero_change";
   const hidden = ev.card && ev.card.hidden;
+  const kind = isHero ? "hero" : ev.kind || "spell";
+  const who = ev.mine ? "Juegas" : "Tu rival juega";
   return (
-    <div className={"cast-overlay " + (ev.mine ? "mine" : "opp") + (isSecretReveal ? " secret-reveal" : "")}>
+    <div className={"cast-overlay " + (ev.mine ? "mine" : "opp") + (isSecretReveal ? " secret-reveal" : "") + " k-" + kind}
+      style={{ "--ov-ms": overlayMs(ev) + "ms" }}>
       {isSecretReveal && <div className="secret-flash" />}
+      {isHero && <div className="hero-flash" />}
       <div className="cast-card">
-        {hidden ? (
+        {!isSecretReveal && !isHero && !ev.secret && <div className="cast-who">{who}</div>}
+        {isHero ? (
+          <div className="hero-swap">
+            {ev.old && <div className="hero-old"><Card card={ev.old} /></div>}
+            <div className="hero-new"><Card card={ev.card} /></div>
+          </div>
+        ) : hidden ? (
           <div className="secret-back"><span>?</span></div>
         ) : (
           <Card card={ev.card} />
         )}
         {(isSecretReveal || ev.secret) && <div className="secret-banner">{isSecretReveal ? "¡Secreto!" : "Secreto"}</div>}
+        {isHero && <div className="secret-banner hero-banner">{ev.mine ? "¡Tu nuevo héroe!" : "¡Nuevo héroe del rival!"}</div>}
       </div>
     </div>
   );
@@ -328,7 +386,21 @@ export function GameBoard({ gameId, onExit }) {
     if (!ev) return;
     overlayBusy.current = true;
     setOverlay(ev);
-    const ms = ev.type === "secret" ? 2000 : ev.secret ? 1400 : 1700;
+    const ms = overlayMs(ev);
+    if (ev.type === "hero_change") {
+      // el retrato del héroe brilla y se transforma cuando termina la presentación
+      setTimeout(() => {
+        const el = document.querySelector(`.board [data-eid="${ev.eid}"]`);
+        if (el && el.animate) {
+          el.animate(
+            [{ transform: "scale(.6)", filter: "brightness(3) saturate(0)", boxShadow: "0 0 0 0 #f2c66b" },
+              { transform: "scale(1.18)", filter: "brightness(1.6)", boxShadow: "0 0 50px 22px #f2c66b" },
+              { transform: "scale(1)", filter: "none", boxShadow: "0 0 0 0 #f2c66b00" }],
+            { duration: 1100, easing: "ease-out" },
+          );
+        }
+      }, ms - 500);
+    }
     setTimeout(() => {
       setOverlay(null);
       overlayBusy.current = false;
@@ -400,7 +472,8 @@ export function GameBoard({ gameId, onExit }) {
       const newFlyers = [];
       const newMarks = [];
       fresh.forEach((ev, idx) => {
-        if (ev.type === "cast" || ev.type === "secret") {
+        if ((ev.type === "cast" && ev.kind !== "hero") || ev.type === "secret" || ev.type === "hero_change") {
+          // las cartas de héroe se muestran con su propia animación (hero_change)
           overlayQueue.current.push(ev);
         } else if (ev.type === "draw") {
           const deck = rectOf(`[data-deck="${ev.mine ? "me" : "opp"}"]`);

@@ -19,7 +19,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from . import arena_rules as R
-from . import auth, db, draft
+from . import auth, db, draft, rooms
 from .game_session import ActionError, GameSession
 
 COOKIE = "wa_session"
@@ -40,7 +40,9 @@ _rng = random.SystemRandom()
 games = {}            # game_id -> GameSession
 game_runs = {}        # game_id -> (run1_id, run2_id)
 user_game = {}        # user_id -> game_id
-queue = []            # [(user_id, run_id, desde)]
+queue = []            # [(user_id, run_id, desde, sala)]
+presence = {r: {} for r in rooms.ROOMS}  # sala -> {user_id: última vez visto}
+PRESENCE_SECONDS = 75
 game_events = {}      # game_id -> asyncio.Event (se reemplaza en cada cambio)
 lock = asyncio.Lock()
 
@@ -82,6 +84,31 @@ def current_user(request, require_csrf=False):
     return s
 
 
+def room_of(request):
+    """Sala elegida por el cliente (cabecera X-Room o parámetro ?room=)."""
+    return rooms.normalize(request.headers.get("x-room") or request.query_params.get("room"))
+
+
+def seen(user_id, room):
+    now = time.time()
+    for r, users in presence.items():
+        if r == room:
+            users[user_id] = now
+        else:
+            users.pop(user_id, None)
+
+
+def online_counts():
+    now = time.time()
+    out = {}
+    for r, users in presence.items():
+        for uid, t in list(users.items()):
+            if now - t > PRESENCE_SECONDS:
+                users.pop(uid, None)
+        out[r] = len(users)
+    return out
+
+
 def api(require_login=True, csrf=None):
     """Decorador: gestiona sesión, CSRF y errores."""
     def deco(fn):
@@ -92,6 +119,8 @@ def api(require_login=True, csrf=None):
                 user = current_user(request, require_csrf=need_csrf)
                 if user is None:
                     return err("No has iniciado sesión o la sesión no es válida", 401)
+                if request.headers.get("x-room") in rooms.ROOMS:
+                    seen(user["user_id"], request.headers["x-room"])
             try:
                 return await fn(request, user)
             except ActionError as e:
@@ -167,54 +196,70 @@ async def me(request, _):
     s = current_user(request)
     if s is None:
         return JSONResponse({"user": None})
+    gid = user_game.get(s["user_id"])
     return JSONResponse({"user": {"username": s["username"]}, "csrf": s["csrf_token"],
-                         "game_id": user_game.get(s["user_id"])})
+                         "game_id": gid, "game_room": games[gid].room if gid in games else None})
+
+
+@api(require_login=False)
+async def room_list(request, _):
+    counts = online_counts()
+    out = [dict(info, online=counts.get(info["key"], 0)) for info in rooms.public_info()]
+    return JSONResponse({"rooms": out})
 
 
 # --------------------------------------------------------------------------- arena
-def active_run(user_id):
+def active_run(user_id, room):
     return db.query_one(
-        "SELECT * FROM arena_runs WHERE user_id = ? AND status IN ('drafting', 'playing') "
-        "ORDER BY id DESC", (user_id,))
+        "SELECT * FROM arena_runs WHERE user_id = ? AND room = ? AND status IN ('drafting', 'playing') "
+        "ORDER BY id DESC", (user_id, room))
 
 
 def run_json(run):
     if run is None:
         return {"run": None}
     st = json.loads(run["state"])
-    return {"run": {"id": run["id"], "status": run["status"], "wins": run["wins"],
+    st.setdefault("room", run.get("room") or rooms.DEFAULT_ROOM)
+    rooms.activate(st["room"])
+    return {"run": {"id": run["id"], "status": run["status"], "wins": run["wins"], "room": st["room"],
                     "losses": run["losses"], "draft": draft.public_state(st),
                     "max_wins": R.MAX_WINS, "max_losses": R.MAX_LOSSES}}
 
 
 @api()
 async def get_run(request, user):
-    return JSONResponse(run_json(active_run(user["user_id"])))
+    return JSONResponse(run_json(active_run(user["user_id"], room_of(request))))
 
 
 @api()
 async def new_run(request, user):
-    if active_run(user["user_id"]):
-        return err("Ya tienes una run de Arena en curso")
-    st = draft.new_run_state(_rng)
-    db.insert("INSERT INTO arena_runs (user_id, state) VALUES (?, ?)",
-              (user["user_id"], json.dumps(st)))
-    return JSONResponse(run_json(active_run(user["user_id"])))
+    room = room_of(request)
+    if active_run(user["user_id"], room):
+        return err("Ya tienes una run de Arena en curso en esta sala")
+    rooms.activate(room)
+    st = draft.new_run_state(_rng, room)
+    db.insert("INSERT INTO arena_runs (user_id, state, room) VALUES (?, ?, ?)",
+              (user["user_id"], json.dumps(st), room))
+    return JSONResponse(run_json(active_run(user["user_id"], room_of(request))))
 
 
 async def _draft_step(request, user, fn):
     data = await body_json(request)
-    run = active_run(user["user_id"])
+    room = room_of(request)
+    run = active_run(user["user_id"], room)
     if run is None or run["status"] != "drafting":
         return err("No estás haciendo un draft")
     idx = data.get("index")
     if not isinstance(idx, int):
         return err("Opción no válida")
-    st = fn(json.loads(run["state"]), idx, _rng)
+    rooms.activate(room)
+    state = json.loads(run["state"])
+    state.setdefault("room", room)
+    st = fn(state, idx, _rng)
     status = "playing" if st["complete"] else "drafting"
     db.execute("UPDATE arena_runs SET state = ?, status = ? WHERE id = ?",
                (json.dumps(st), status, run["id"]))
-    return JSONResponse(run_json(active_run(user["user_id"])))
+    return JSONResponse(run_json(active_run(user["user_id"], room_of(request))))
 
 
 @api()
@@ -229,7 +274,7 @@ async def pick_card(request, user):
 
 @api()
 async def retire_run(request, user):
-    run = active_run(user["user_id"])
+    run = active_run(user["user_id"], room_of(request))
     if run is None:
         return err("No tienes ninguna run activa")
     if user["user_id"] in user_game:
@@ -242,7 +287,7 @@ async def retire_run(request, user):
 
 @api()
 async def history(request, user):
-    runs = db.query("SELECT id, wins, losses, status, state, created_at FROM arena_runs "
+    runs = db.query("SELECT id, wins, losses, status, state, created_at, room FROM arena_runs "
                     "WHERE user_id = ? AND status IN ('finished', 'retired') ORDER BY id DESC "
                     "LIMIT 20", (user["user_id"],))
     out = []
@@ -250,6 +295,8 @@ async def history(request, user):
         st = json.loads(r["state"])
         out.append({"id": r["id"], "wins": r["wins"], "losses": r["losses"], "status": r["status"],
                     "class": draft.CLASS_NAMES_ES.get(st.get("card_class") or "", "?"),
+                    "room": r.get("room") or rooms.DEFAULT_ROOM,
+                    "room_name": rooms.ROOMS[rooms.normalize(r.get("room"))]["name"],
                     "date": str(r["created_at"])})
     return JSONResponse({"runs": out})
 
@@ -262,18 +309,29 @@ def _leave_queue(user_id):
 @api()
 async def queue_join(request, user):
     uid = user["user_id"]
+    room = room_of(request)
     async with lock:
         if uid in user_game:
-            return JSONResponse({"status": "in_game", "game_id": user_game[uid]})
-        run = active_run(uid)
+            return JSONResponse(_in_game(uid))
+        run = active_run(uid, room)
         if run is None or run["status"] != "playing":
             return err("Necesitas un mazo de Arena terminado para buscar partida")
-        if not any(q[0] == uid for q in queue):
-            queue.append((uid, run["id"], time.time()))
-        _try_match()
+        if not any(q[0] == uid and q[3] == room for q in queue):
+            _leave_queue(uid)  # solo se puede buscar partida en una sala a la vez
+            queue.append((uid, run["id"], time.time(), room))
+        _try_match(room)
         if uid in user_game:
-            return JSONResponse({"status": "in_game", "game_id": user_game[uid]})
-    return JSONResponse({"status": "queued", "players_in_queue": len(queue)})
+            return JSONResponse(_in_game(uid))
+    return JSONResponse({"status": "queued", "players_in_queue": _queued(room)})
+
+
+def _queued(room):
+    return sum(1 for q in queue if q[3] == room)
+
+
+def _in_game(uid):
+    gid = user_game[uid]
+    return {"status": "in_game", "game_id": gid, "room": games[gid].room if gid in games else None}
 
 
 @api()
@@ -286,27 +344,31 @@ async def queue_leave(request, user):
 @api()
 async def queue_status(request, user):
     uid = user["user_id"]
+    room = room_of(request)
     if uid in user_game:
-        return JSONResponse({"status": "in_game", "game_id": user_game[uid]})
-    if any(q[0] == uid for q in queue):
-        return JSONResponse({"status": "queued", "players_in_queue": len(queue)})
+        return JSONResponse(_in_game(uid))
+    if any(q[0] == uid and q[3] == room for q in queue):
+        return JSONResponse({"status": "queued", "players_in_queue": _queued(room)})
     return JSONResponse({"status": "idle"})
 
 
-def _try_match():
-    while len(queue) >= 2:
-        a = queue.pop(0)
-        b = next((q for q in queue if q[0] != a[0]), None)
-        if b is None:
-            queue.insert(0, a)
+def _try_match(room):
+    while True:
+        waiting = [q for q in queue if q[3] == room]
+        if len(waiting) < 2:
             return
+        a = waiting[0]
+        b = next((q for q in waiting[1:] if q[0] != a[0]), None)
+        if b is None:
+            return
+        queue.remove(a)
         queue.remove(b)
-        _start_game(a, b)
+        _start_game(a, b, room)
 
 
-def _start_game(a, b):
+def _start_game(a, b, room):
     seats = []
-    for uid, run_id, _ in (a, b):
+    for uid, run_id, _, _r in (a, b):
         run = db.query_one("SELECT r.state, u.username FROM arena_runs r JOIN users u "
                            "ON u.id = r.user_id WHERE r.id = ?", (run_id,))
         st = json.loads(run["state"])
@@ -315,7 +377,7 @@ def _start_game(a, b):
     _rng.shuffle(seats)  # quién empieza es aleatorio
     gid = db.insert("INSERT INTO matches (run1_id, run2_id, user1_id, user2_id) VALUES (?, ?, ?, ?)",
                     (seats[0]["run_id"], seats[1]["run_id"], seats[0]["user_id"], seats[1]["user_id"]))
-    games[gid] = GameSession(gid, seats)
+    games[gid] = GameSession(gid, seats, room)
     game_runs[gid] = {s["user_id"]: s["run_id"] for s in seats}
     for s in seats:
         user_game[s["user_id"]] = gid
@@ -357,6 +419,7 @@ def _game_for(user, gid):
 @api()
 async def game_state(request, user):
     s = _game_for(user, int(request.path_params["gid"]))
+    seen(user["user_id"], s.room)
     return JSONResponse(s.view(user["user_id"]))
 
 
@@ -415,6 +478,7 @@ async def game_events_stream(request, user):
             sess = games.get(gid)
             if sess is None:
                 break
+            seen(uid, sess.room)
             if sess.version != last:
                 last = sess.version
                 yield "data: %s\n\n" % json.dumps(sess.view(uid))
@@ -473,7 +537,9 @@ class SecurityHeaders(BaseHTTPMiddleware):
 async def lifespan(app):
     db.init_schema()
     from .cards import arena_pool
-    arena_pool()  # carga el motor al arrancar
+    for r in rooms.ROOMS:  # carga las cartas de todas las salas al arrancar
+        arena_pool(r)
+    rooms.activate(rooms.DEFAULT_ROOM)
     task = asyncio.create_task(ticker())
     yield
     task.cancel()
@@ -484,6 +550,7 @@ routes = [
     Route("/api/login", login, methods=["POST"]),
     Route("/api/logout", logout, methods=["POST"]),
     Route("/api/me", me),
+    Route("/api/rooms", room_list),
     Route("/api/run", get_run),
     Route("/api/run/new", new_run, methods=["POST"]),
     Route("/api/run/hero", pick_hero, methods=["POST"]),

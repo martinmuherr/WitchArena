@@ -7,12 +7,13 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
-from app import draft  # noqa: E402
+from app import draft, rooms  # noqa: E402
 from app.game_session import ActionError, GameSession  # noqa: E402
 
 
-def random_deck(rng):
-    st = draft.new_run_state(rng)
+def random_deck(rng, room):
+    rooms.activate(room)
+    st = draft.new_run_state(rng, room)
     st = draft.pick_hero(st, rng.randrange(3), rng)
     while not st["complete"]:
         st = draft.pick_card(st, rng.randrange(3), rng)
@@ -72,27 +73,37 @@ def bot_step(s, uid, rng):
     return True
 
 
-def run(n, seed):
+def run(n, seed, room_mode="both"):
+    """room_mode: witchwood, kobolds o both (dos partidas a la vez, una en cada sala,
+    alternando jugadas para comprobar que cambiar de sala no mezcla las cartas)."""
     rng = random.Random(seed)
     stats = {"ok": 0, "crash": 0, "stuck": 0}
+    room_list = list(rooms.ROOMS) if room_mode == "both" else [room_mode]
     for g in range(n):
-        h1, d1 = random_deck(rng)
-        h2, d2 = random_deck(rng)
-        s = GameSession(g, [
-            {"user_id": 1, "username": "A", "hero": h1, "deck": d1},
-            {"user_id": 2, "username": "B", "hero": h2, "deck": d2},
-        ])
+        sessions = []
+        for k, room in enumerate(room_list):
+            h1, d1 = random_deck(rng, room)
+            h2, d2 = random_deck(rng, room)
+            sessions.append(GameSession(g * 10 + k, [
+                {"user_id": 1, "username": "A", "hero": h1, "deck": d1},
+                {"user_id": 2, "username": "B", "hero": h2, "deck": d2},
+            ], room))
+        s = sessions[0]
         try:
             steps = 0
-            while not s.finished and steps < 3000:
+            live = list(sessions)
+            while live and steps < 6000:
+                s = live[steps % len(live)]
                 moved = bot_step(s, 1, rng) or bot_step(s, 2, rng)
                 steps += 1
+                if s.finished:
+                    live.remove(s)
+                    stats["ok"] += 1
+                    continue
                 if not moved:
                     break
                 s.view(1), s.view(2)
-            if s.finished:
-                stats["ok"] += 1
-            else:
+            for s in live:
                 stats["stuck"] += 1
                 print("partida", g, "atascada en turno", s.game.turn)
         except Exception:
@@ -103,4 +114,5 @@ def run(n, seed):
 
 
 if __name__ == "__main__":
-    run(int(sys.argv[1]) if len(sys.argv) > 1 else 5, int(sys.argv[2]) if len(sys.argv) > 2 else 1)
+    run(int(sys.argv[1]) if len(sys.argv) > 1 else 5, int(sys.argv[2]) if len(sys.argv) > 2 else 1,
+        sys.argv[3] if len(sys.argv) > 3 else "both")

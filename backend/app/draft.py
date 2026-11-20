@@ -8,7 +8,8 @@ import random
 from hearthstone.enums import CardClass, Rarity
 
 from . import arena_rules as R
-from .cards import arena_pool, card_view
+from . import rooms
+from .cards import arena_pool, card_view, engine_db
 
 
 def _weighted_choice(rng, items):
@@ -26,8 +27,8 @@ def _roll_rarity(rng, pick_number):
     return _weighted_choice(rng, list(table.items()))
 
 
-def offer_cards(card_class, pick_number, rng):
-    pool = arena_pool()[card_class]
+def offer_cards(card_class, pick_number, rng, room=None):
+    pool = arena_pool(room)[card_class]
     rarity = _roll_rarity(rng, pick_number)
     candidates = list(pool[rarity])
     offer = []
@@ -38,10 +39,11 @@ def offer_cards(card_class, pick_number, rng):
     return offer
 
 
-def new_run_state(rng=None):
+def new_run_state(rng=None, room=None):
     rng = rng or random.SystemRandom()
     classes = rng.sample(list(R.CLASSES), 3)
     return {
+        "room": rooms.normalize(room),
         "phase": "hero",
         "hero_options": [c.name for c in classes],
         "card_class": None,
@@ -61,7 +63,7 @@ def pick_hero(state, index, rng=None):
     cls = CardClass[state["hero_options"][index]]
     state = dict(state)
     state.update(phase="cards", card_class=cls.name, hero_card=R.CLASSES[cls], deck=[],
-                 offer=offer_cards(cls, 1, rng))
+                 offer=offer_cards(cls, 1, rng, state.get("room")))
     return state
 
 
@@ -76,7 +78,8 @@ def pick_card(state, index, rng=None):
     if len(state["deck"]) >= R.DECK_SIZE:
         state.update(phase="done", offer=[], complete=True)
     else:
-        state["offer"] = offer_cards(CardClass[state["card_class"]], len(state["deck"]) + 1, rng)
+        state["offer"] = offer_cards(CardClass[state["card_class"]], len(state["deck"]) + 1, rng,
+                                     state.get("room"))
     return state
 
 
@@ -87,11 +90,23 @@ CLASS_NAMES_ES = {
 }
 
 
+def hero_option(class_key):
+    """Clase para elegir: retrato del héroe y su poder de héroe."""
+    hero = R.CLASSES[CardClass[class_key]]
+    data = engine_db().get(hero)
+    power_id = getattr(data, "hero_power", None) if data else None
+    power = card_view(power_id) if power_id else None
+    hv = card_view(hero)
+    return {"key": class_key, "name": CLASS_NAMES_ES[class_key], "hero": hero,
+            "hero_name": hv.get("name"), "power": power}
+
+
 def public_state(state):
-    """Lo que ve el jugador de su draft."""
+    """Lo que ve el jugador de su draft (con la sala de la run ya activada)."""
     return {
+        "room": state.get("room", rooms.DEFAULT_ROOM),
         "phase": state["phase"],
-        "hero_options": [{"key": k, "name": CLASS_NAMES_ES[k]} for k in state["hero_options"]],
+        "hero_options": [hero_option(k) for k in state["hero_options"]],
         "card_class": state["card_class"],
         "card_class_name": CLASS_NAMES_ES.get(state["card_class"] or "", None),
         "deck": [card_view(c) for c in state["deck"]],

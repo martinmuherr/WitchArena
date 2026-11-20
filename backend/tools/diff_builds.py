@@ -17,7 +17,7 @@ from hearthstone import cardxml  # noqa: E402
 from hearthstone.enums import CardSet  # noqa: E402
 
 SETS = {
-    CardSet.BASIC, CardSet.EXPERT1, CardSet.HOF, CardSet.UNGORO,
+    CardSet.BASIC, CardSet.EXPERT1, CardSet.HOF, CardSet.UNGORO, CardSet.OG, CardSet.KARA, CardSet.GANGS,
     CardSet.ICECROWN, CardSet.LOOTAPALOOZA, CardSet.GILNEAS,
 }
 

@@ -4,10 +4,12 @@ El servidor es la única autoridad: los clientes mandan intenciones
 ("juega la carta 34 sobre el objetivo 12") y aquí se validan contra el motor.
 Cada jugador solo recibe la información que podría ver en el juego real.
 """
+import functools
 import logging
 import time
 
 from . import cards as C  # noqa: F401  (inicializa rutas del motor)
+from . import rooms
 from fireplace.exceptions import GameOver, InvalidAction
 from fireplace.game import Game
 from fireplace.player import Player
@@ -27,10 +29,25 @@ def _ids(entities):
     return [e.entity_id for e in entities]
 
 
+def _in_room(fn):
+    """Antes de tocar el motor, carga las cartas de la sala de esta partida."""
+    @functools.wraps(fn)
+    def wrapper(self, *a, **kw):
+        rooms.activate(self.room)
+        return fn(self, *a, **kw)
+    return wrapper
+
+
+TYPE_KIND = {CardType.MINION: "minion", CardType.SPELL: "spell", CardType.WEAPON: "weapon",
+             CardType.HERO: "hero"}
+
+
 class GameSession:
-    def __init__(self, game_id, seats):
+    def __init__(self, game_id, seats, room=None):
         """seats: lista de 2 dicts {user_id, username, hero, deck}"""
         self.id = game_id
+        self.room = rooms.normalize(room)
+        rooms.activate(self.room)
         self.seats = seats
         players = [Player(s["username"], list(s["deck"]), s["hero"]) for s in seats]
         self.game = Game(players=players)
@@ -162,9 +179,11 @@ class GameSession:
         board = self._board()
         source = card.entity_id if card.type == CardType.MINION else p.hero.entity_id
         cid = card.id
-        if card.type == CardType.SPELL:
-            self._event({"type": "cast", "player": self.players.index(p), "card": C.card_view(cid),
-                         "secret": bool(getattr(card, "secret", False)), "eid": card.entity_id})
+        # todas las cartas jugadas se muestran un momento en pantalla (las de secreto, ocultas al rival)
+        self._event({"type": "cast", "player": self.players.index(p), "card": C.card_view(cid),
+                     "kind": TYPE_KIND.get(card.type, "spell"),
+                     "secret": bool(getattr(card, "secret", False)), "eid": card.entity_id,
+                     "target": tgt.entity_id if tgt is not None else None})
         self._run(lambda: card.play(target=tgt, index=index, choose=ch))
         self._record_effect(before, source, cid, tgt)
         self._bump(entry)
@@ -261,6 +280,7 @@ class GameSession:
                 "deck": len(pl.deck),
                 "field": [(m.entity_id, m.id) for m in pl.field],
                 "secrets": [(sc.entity_id, sc.id) for sc in pl.secrets],
+                "hero": (pl.hero.entity_id, pl.hero.id),
             })
         return st
 
@@ -280,6 +300,12 @@ class GameSession:
         after = self._board()
         dying_with_dr = None
         for i, (b, a) in enumerate(zip(before_board, after)):
+            # cambio de héroe (cartas de héroe, Lord Jaraxxus, Majordomo...)
+            if b.get("hero") and a["hero"][0] != b["hero"][0]:
+                old_v, new_v = C.card_view(b["hero"][1]), C.card_view(a["hero"][1])
+                self._event({"type": "hero_change", "player": i, "eid": a["hero"][0],
+                             "old": old_v, "card": new_v})
+                self.log.append([{"t": "Nuevo héroe: "}, {"card": new_v}])
             # robos (del mazo) y cartas que llegan a la mano por otros medios
             new = [e for e in a["hand"] if e not in b["hand"]]
             drawn = max(0, b["deck"] - a["deck"])
@@ -406,6 +432,8 @@ class GameSession:
                                        "poisonous", "lifesteal", "rush", "charge", "silenced",
                                        "dormant", "cant_be_targeted_by_spells")
                           if getattr(c, f, False)]
+        if c.type == CardType.HERO and c.zone == Zone.PLAY:
+            v["flags"] = [f for f in ("frozen", "immune", "stealthed") if getattr(c, f, False)]
         if c.type == CardType.WEAPON:
             v["atk"] = c.atk
             v["durability"] = c.durability
@@ -497,4 +525,10 @@ class GameSession:
             "last_effect": self.last_effect,
             "events": self._events_for(self.players.index(me))[-25:],
             "event_seq": self._event_seq,
+            "room": self.room,
         }
+
+
+for _name in ("mulligan", "choose", "play", "attack", "hero_power", "end_turn", "concede",
+              "tick", "view"):
+    setattr(GameSession, _name, _in_room(getattr(GameSession, _name)))
